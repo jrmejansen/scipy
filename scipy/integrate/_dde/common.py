@@ -2,7 +2,7 @@ from itertools import groupby
 from warnings import warn
 import numpy as np
 from scipy.sparse import find, coo_matrix
-
+from inspect import isfunction
 
 EPS = np.finfo(float).eps
 
@@ -61,7 +61,7 @@ def norm(x):
     return np.linalg.norm(x) / x.size ** 0.5
 
 
-def select_initial_step(fun, t0, y0, f0, direction, order, rtol, atol):
+def select_initial_step(fun, t0, y0, Z0, f0, direction, order, rtol, atol):
     """Empirically select a good initial step.
 
     The algorithm is described in [1]_.
@@ -108,7 +108,7 @@ def select_initial_step(fun, t0, y0, f0, direction, order, rtol, atol):
         h0 = 0.01 * d0 / d1
 
     y1 = y0 + h0 * direction * f0
-    f1 = fun(t0 + h0 * direction, y1)
+    f1 = fun(t0 + h0 * direction, y1, Z0)
     d2 = norm((f1 - f0) / scale) / h0
 
     if d1 <= 1e-15 and d2 <= 1e-15:
@@ -120,7 +120,7 @@ def select_initial_step(fun, t0, y0, f0, direction, order, rtol, atol):
 
 
 class ContinuousExt(object):
-    """Continuous ODE solution.
+    """Continuous DDE solution.
 
     It is organized as a collection of `DenseOutput` objects which represent
     local interpolants. It provides an algorithm to select a right interpolant
@@ -186,7 +186,27 @@ class ContinuousExt(object):
         if not self.ascending:
             segment = self.n_segments - 1 - segment
 
-        return self.interpolants[segment](t)
+        if(segment==0):# and
+#           self.interpolants[segment].__class__.__name__ != 'RkDenseOutput'):
+            history = self.interpolants[segment]
+            # as we store history values between t0-delayMax and t0
+            # the first segment is not a dense output of the RK integration
+            # a specific management is needed
+            if(type(history) is list):
+                # this is list on cubicHermiteSpline
+                n = len(history)
+                va = np.zeros(n)
+                for k in range(n):
+                    va[k] = history[k](t)
+            elif(isfunction(history)):
+                # from a function
+                va = history(t)
+            elif(isinstance(history, np.ndarray)):
+                # from a cte
+                va = history[0]
+            return va
+        else:
+            return self.interpolants[segment](t)
 
     def __call__(self, t):
         """Evaluate the solution.
@@ -227,7 +247,27 @@ class ContinuousExt(object):
         group_start = 0
         for segment, group in groupby(segments):
             group_end = group_start + len(list(group))
-            y = self.interpolants[segment](t_sorted[group_start:group_end])
+            if(segment==0):
+                Nt = len(t_sorted[group_start:group_end])
+                interp = self.interpolants[segment]
+                n = len(interp)
+                y = np.zeros((n,Nt))
+                for k in range(Nt):
+                    if(type(interp) is list):
+                        # this is list on cubicHermiteSpline
+                        n = len(interp)
+                        va = np.zeros(n)
+                        for m in range(n):
+                            va[m] = interp[m](t[k])
+                    elif(isfunction(interp)):
+                        # from a function
+                        va = interp(t[k])
+                    elif(isinstance(interp, np.ndarray)):
+                        # from a cte
+                        va = interp
+                    y[:,k] = va
+            else:
+                y = self.interpolants[segment](t_sorted[group_start:group_end])
             ys.append(y)
             group_start = group_end
 

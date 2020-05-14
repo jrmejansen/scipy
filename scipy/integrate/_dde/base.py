@@ -1,24 +1,93 @@
+import sys
 import numpy as np
 from inspect import isfunction
+from scipy.interpolate import CubicHermiteSpline
 
 def check_arguments(fun, y0, h):
     """Helper function for checking arguments common to all solvers."""
     y0 = np.asarray(y0)
-    if not np.issubdtype(y0.dtype, np.complexfloating):
+    if np.issubdtype(y0.dtype, np.complexfloating):
         raise ValueError("`y0` is complex, but the chosen solver does "
                              "not support integration in a complex domain.")
     else:
         dtype = float
     y0 = y0.astype(dtype, copy=False)
-
+    if(type(h) is tuple):
+        h_info = 'from tuple'
+        h_n = h
+    elif(isfunction(h)):
+        h_info = 'from function'
+        def h_n(t):
+            return np.asarray(h(t),dtype=dtype)
+        test = h_n(0.0)
+        if(test.shape != y0.shape):
+            raise ValueError("size of output of history function 'h'\
+                              is not compatible with size of y0")
+    elif(h.__class__.__name__ == 'DdeResult'):
+        h_info = 'from previous simu'
+        h_n = h
+    else:
+        h_info = 'from constant'
+        h_n = np.asarray(h)
+        h_n = h_n.astype(dtype, copy=False)
+        if(h_n.shape != y0.shape):
+            raise ValueError("size of output of history function 'h'\
+                              is not compatible with size of y0")
     if y0.ndim != 1:
         raise ValueError("`y0` must be 1-dimensional.")
 
-    def fun_wrapped(t, y, h):
-        return np.asarray(fun(t, y, h), dtype=dtype)
+    def fun_wrapped(t, y, Z):
+        return np.asarray(fun(t, y, Z), dtype=dtype)
+    
+    return fun_wrapped, y0, h_n, h_info
 
-    return fun_wrapped, y0
 
+def discontDetection(t0, tf, delays):
+    """Discontinuity detection between t0 and tf.
+
+    Parameters
+        t0 ():
+        tf ():
+    ----------
+    Returns
+    -------
+    nxtDisc : (int)
+        index of the nearst discontinuity
+    discont : ndarray, shape (nbr_discontinuities,)
+        array with all discont within my interval of integration
+
+    References
+    ----------
+    .. [1] S. Shampine, Thompson, "?????" dde23 MATLAB
+    """
+
+    discont = None
+
+    #  discontinuites detection
+    if not delays:
+        discont = tf
+        delayMin = np.inf
+    else:
+
+        inter_delays = delays # list of intersection of delays
+        tmp_delays = delays
+
+        while(tmp_delays):  # adding intersection between delays
+            delay_k = tmp_delays[0]
+            tmp_delays = tmp_delays[1:]
+            inter_delays = inter_delays + (delay_k + np.asarray(tmp_delays)).tolist()
+        del tmp_delays
+        # definition of al delays intersections from delays summation
+        discont = np.arange(t0, tf, delays[0])
+        for tau_i in inter_delays[1:]:
+            discont = np.append(discont, np.arange(t0, tf, tau_i))
+        discont = np.asarray(sorted(set(discont)) + [tf])
+        #  conbinaison of all delays + intersection of delays between t0 tf
+        diff = np.append(np.array([10000.0]), np.diff(discont))
+        #  addition of 1 element in array to do diff operation and keep same length
+        discont = discont[~(diff < 1e-12)]  #  on enleves doublons
+        nxtDisc = 1  # indice diiie la prochain discontinuite
+    return nxtDisc, discont
 
 class DdeSolver(object):
     """Base class for DDE solvers.
@@ -37,8 +106,8 @@ class DdeSolver(object):
     t_bound : float
         Boundary time --- the integration won't continue beyond it. It also
         determines the direction of the integration.
-    delays : 
-    
+    delays :
+
     Attributes
     ----------
     n : int
@@ -70,23 +139,37 @@ class DdeSolver(object):
     def __init__(self, fun, t0, y0, t_bound, h,
                  delays):
         self.t_old = None
-        self.h = h
+        self.t0 = t0
         self.t = t0
+        self.t_bound = t_bound
+        self._fun, self.y, self.h, self.h_info = check_arguments(fun,y0,h)
+        self.n = self.y.size
+
+        self.direction = np.sign(t_bound - t0) if t_bound != t0 else 1
+        self.status = 'running'
+        if(self.h_info != 'from previous simu'):
+            self.nfev = 0
+            self.njev = 0
+            self.nlu = 0
+            self.nfailed = 0
+            self.nOverlap = 0
+        else:
+            self.nfev = self.h.nfev
+            self.njev = self.h.njev
+            self.nlu = self.h.nlu
+            self.nfailed = self.h.nfailed
+            self.nOverlap = self.h.nOverlap
+
+
         self.delays = delays
         self.Ndelays = len(delays)
         self.delayMin = min(self.delays)
         self.delayMax = max(self.delays)
 
-        (self.nxtDisc, self.discont) = discontinuityDetection(t0,t_bound)
-        self.init_history(h)
+        (self.nxtDisc, self.discont) = discontDetection(t0, t_bound, delays)
+        self.init_history_function()
 
         self.Z0 = self.delaysEval(self.t)
-        
-        self._fun, self.y = check_arguments(fun, y0, self.Z0)
-        self.f = self.fun(self.t, self.y, Z0) # initial value of f(t0,y0,Z0)
-
-        self.t_bound = t_bound
-
         fun_single = self._fun
 
         def fun(t, y, Z):
@@ -96,54 +179,69 @@ class DdeSolver(object):
         self.fun = fun
         self.fun_single = fun_single
 
-        self.direction = np.sign(t_bound - t0) if t_bound != t0 else 1
-        self.n = self.y.size
-        self.status = 'running'
+        self.f = self.fun(self.t, self.y, self.Z0) # initial value of f(t0,y0,Z0)
 
-        self.nfev = 0
-        self.njev = 0
-        self.nlu = 0
 
-    def init_history(self):
+    def init_history_function(self):
         """
+        initialisation of past values : t_past, y_past yp_past
         """
-        if(type(self.h) is tuple):
-            self.h_info = 'from tuple'
-            (self.t_past, self.y_past, self.yp_past) = h
-        elif(isfunction(h)):
-            self.h_info = 'from function'
-            self.h_fun = h
-            self.t_past = np.linspace(self.t0-self.delayMax, self.t0 , 100)
-            self.y_past = self.h_fun(self.t_past)
-            self.yp_past = np.zeros(self.y_past.shape)
+        if( self.h_info == 'from tuple'):
+            (self.t_past, self.y_past, self.yp_past) = self.h
+            self.t_oldest = self.t_past[0]
+            self.y_oldest = self.y_past[:,0]
+            self.yp_oldest = self.yp_past[:,0]
+            self.h = []
+            for k in range(self.n):
+                p = CubicHermiteSpline(self.t_past, self.y_past[k,:],
+                                       self.yp_past[k,:], extrapolate=False)
+                self.h.append(p)
+        elif(self.h_info == 'from function'):
+            self.t_oldest = self.t0-self.delayMax
+            self.t_past = [self.t_oldest, self.t0]
+            self.y_oldest = self.h(self.t_oldest)
+            self.yp_oldest = np.zeros(self.y_oldest.shape)
+        elif(self.h_info == 'from constant'):
+            self.t_oldest = self.t0-self.delayMax
+            self.y_oldest = self.h
+            self.yp_oldest = np.zeros(self.h.shape)
+            self.t_past = [self.t_oldest, self.t0]
+        elif(self.h_info == 'from previous simu'):
+            self.solver_old = self.h
+            self.h = self.solver_old.sol
         else:
-            self.h_info = 'from constant'
-            self.t_past = np.linspace(self.t0-self.delayMax, self.t0 , 100)
-            self.y_past = np.ones(self.t_past.shape) * h
-            self.yp_past = np.zeros(self.y_past.shape)
+            print('h_info',self.h_info)
+            raise ValueError("wrong initialisation of the dde history")
+
 
     def delaysEval(self,t):
+        Z = np.zeros((self.n,self.Ndelays))
         t_delays = t - np.asarray(self.delays)
         for k in range(self.Ndelays):
             t_delay_k = t_delays[k]
-            if(t_delay_k < self.t0):  
+            if(t_delay_k < self.t0):
                 # case where we can not use continuous extension
                 if(self.h_info == 'from function'):
-                    Z_k = self.h_fun(t_delay_k)
+                    Z_k = self.h(t_delay_k)
                 elif(self.h_info == 'from tuple'):
-                    Z_k = hermiteInterp(k,t_delay_k, self.t_past,
-                                        self.y_past, self.yp_past)
-                else:
-                    Z_k = self.y_past[0]
+                    Z_k = np.zeros(self.n)
+                    for i in range(self.n):
+                        Z_k[i] = self.h[i](t_delay_k)
+                        if(np.isnan(Z_k[i])):
+                            raise ValueError("NaN value found in delaysEval")
+                elif(self.h_info == 'from previous simu'):
+                    Z_k = self.h(t_delay_k)
+                elif(self.h_info == 'from constant'):
+                    Z_k = self.h
             else:
-                # use of continous extansion of RK method
-                print("note implemented")
-                if(t_delay_k < self.t):
-                    print('on peut faire du RKCE')
+                if(t_delay_k <= self.t):
+                    # use of continous extansion of RK method
+                    Z_k = self.CE(t_delay_k)
                 else:
                     # overlapping
-                    print('extrapolation')
-                    Z_k = self.denseOutputFormula(t_delay_k)
+                    sol = self.dense_output()
+                    Z_k = sol(t_delay_k)
+                    self.nOverlap += 1
             Z[:,k] = Z_k
         return Z
 

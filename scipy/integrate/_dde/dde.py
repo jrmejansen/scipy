@@ -2,18 +2,17 @@ import inspect
 import numpy as np
 #from .bdf import BDF
 #from .radau import Radau
-from .rk import RK23, RK45, DOP853
+from .rk import RK23, RK45, DOP853, Vern6
 #from .lsoda import LSODA
 from scipy.optimize import OptimizeResult
 from .common import EPS, ContinuousExt
-from .base import OdeSolver
+from .base import DdeSolver
 
 
 METHODS = {'RK23': RK23,
            'RK45': RK45,
            'DOP853': DOP853,
            'Vern6': Vern6,
-           'Tsit5': Tsit5,
            #'BDF': BDF,
            }
 
@@ -51,7 +50,7 @@ def prepare_events(events):
     return events, is_terminal, direction
 
 
-def solve_event_equation(event, sol, t_old, t):
+def solve_event_equation(event, sol, sol_delay, t_old, t):
     """Solve an equation corresponding to an ODE event.
 
     The equation is ``event(t, y(t)) = 0``, here ``y(t)`` is known from an
@@ -75,11 +74,11 @@ def solve_event_equation(event, sol, t_old, t):
         Found solution.
     """
     from scipy.optimize import brentq
-    return brentq(lambda t: event(t, sol(t)), t_old, t,
+    return brentq(lambda t: event(t, sol(t), sol_delay(t)), t_old, t,
                   xtol=4 * EPS, rtol=4 * EPS)
 
 
-def handle_events(sol, events, active_events, is_terminal, t_old, t):
+def handle_events(sol, sol_delay, events, active_events, is_terminal, t_old, t):
     """Helper function to handle events.
 
     Parameters
@@ -106,7 +105,7 @@ def handle_events(sol, events, active_events, is_terminal, t_old, t):
     terminate : bool
         Whether a terminal event occurred.
     """
-    roots = [solve_event_equation(events[event_index], sol, t_old, t)
+    roots = [solve_event_equation(events[event_index], sol, sol_delay, t_old, t)
              for event_index in active_events]
 
     roots = np.asarray(roots)
@@ -154,7 +153,7 @@ def find_active_events(g, g_new, direction):
     return np.nonzero(mask)[0]
 
 
-def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None, dense_output=False,
+def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None,
               events=None, args=None, **options):
     """Solve an -----------------------------------------.
 
@@ -207,8 +206,8 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None, dense_outp
               written in Fortran [14]_. A 7-th order interpolation polynomial
               accurate to 7-th order is used for the dense output.
               Can be applied in the complex domain.
-            * 'Vern6': 
-            * 'Tsit5': 
+            * 'Vern6':
+            * 'Tsit5':
 
         All explicit Runge-Kutta should be used for non-stiff problems.
 ******** des remarques sur les differents solver *********************************************
@@ -388,32 +387,46 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None, dense_outp
 
     solver = method(fun, t0, y0, h, tf, delays, **options)
 
-    if t_eval is None:
-        ts = [t0]
-        ys = [y0]
-    elif t_eval is not None and dense_output:
-        ts = []
-        ti = [t0]
+    if t_eval is None and solver.h_info != 'from previous simu':
+        ts = [solver.t_oldest, t0]
+        ys = [solver.y_oldest, y0]
+        yps = [solver.yp_oldest,fun(t0,y0,solver.Z0)]
+        interpolants = [solver.h]
+    elif t_eval is None and solver.h_info == 'from previous simu':
+        t_h = solver.solver_old.t
+        y_h = solver.solver_old.y
+        yp_h = solver.solver_old.yp
+        ts = solver.solver_old.t.tolist()
         ys = []
+        yps = []
+        interpolants = solver.h.interpolants
     else:
         ts = []
         ys = []
+        yps = []
+        interpolants = []
 
-    interpolants = []
 
     events, is_terminal, event_dir = prepare_events(events)
 
     if events is not None:
-        if args is not None:
-            # Wrap user functions in lambdas to hide the additional parameters.
-            # The original event function is passed as a keyword argument to the
-            # lambda to keep the original function in scope (i.e., avoid the
-            # late binding closure "gotcha").
-            events = [lambda t, x, event=event: event(t, x, *args)
-                      for event in events]
-        g = [event(t0, y0) for event in events]
-        t_events = [[] for _ in range(len(events))]
-        y_events = [[] for _ in range(len(events))]
+        # if args is not None:
+            # # Wrap user functions in lambdas to hide the additional parameters.
+            # # The original event function is passed as a keyword argument to the
+            # # lambda to keep the original function in scope (i.e., avoid the
+            # # late binding closure "gotcha").
+            # events = [lambda t, x, event=event: event(t, x, *args)
+                      # for event in events]
+        g = [event(t0, y0, solver.Z0) for event in events]
+        if(solver.h_info != 'from previous simu'):
+            t_events = [[] for _ in range(len(events))]
+            y_events = [[] for _ in range(len(events))]
+        else:
+            for k in range(len(events)):
+                solver.solver_old.t_events[k] = solver.solver_old.t_events[k].tolist()
+                solver.solver_old.y_events[k] = solver.solver_old.y_events[k].tolist()
+            t_events = solver.solver_old.t_events
+            y_events = solver.solver_old.y_events
     else:
         t_events = None
         y_events = None
@@ -431,23 +444,22 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None, dense_outp
         t_old = solver.t_old
         t = solver.t
         y = solver.y
-
-        if dense_output:
-            sol = solver.dense_output()
-            interpolants.append(sol)
-        else:
-            sol = None
+        yp = solver.f
+        sol = solver.dense_output()
+        interpolants.append(sol)
 
         if events is not None:
-            g_new = [event(t, y) for event in events]
+            Z = solver.delaysEval(t)
+            g_new = [event(t, y, Z) for event in events]
             active_events = find_active_events(g, g_new, event_dir)
-            if active_events.size > 0:
-                if sol is None:
-                    sol = solver.dense_output()
-
-                root_indices, roots, terminate = handle_events(
-                    sol, events, active_events, is_terminal, t_old, t)
-
+            notStopAtBeg = t_old > t0 # to not stop at the beginning of integration
+            if active_events.size > 0 and notStopAtBeg:
+                sol_delay = solver.delaysEval
+                root_indices, roots, terminate = handle_events(sol, sol_delay,
+                                                               events,
+                                                               active_events,
+                                                               is_terminal,
+                                                               t_old, t)
                 for e, te in zip(root_indices, roots):
                     t_events[e].append(te)
                     y_events[e].append(sol(te))
@@ -462,6 +474,7 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None, dense_outp
         if t_eval is None:
             ts.append(t)
             ys.append(y)
+            yps.append(yp)
         else:
             # The value in t_eval equal to t will be included.
             if solver.direction > 0:
@@ -480,28 +493,38 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None, dense_outp
                 ts.append(t_eval_step)
                 ys.append(sol(t_eval_step))
                 t_eval_i = t_eval_i_new
-
+        # construction of object ContinuousExt which is the denseoutput of
+        # RK integration
+        t_ar = np.asarray(ts)
+        CE = ContinuousExt(t_ar, interpolants)
+        solver.CE = CE
         if t_eval is not None and dense_output:
             ti.append(t)
 
     message = MESSAGES.get(status, message)
-
     if t_events is not None:
         t_events = [np.asarray(te) for te in t_events]
         y_events = [np.asarray(ye) for ye in y_events]
-
-    if t_eval is None:
+    if t_eval is None and solver.h_info != 'from previous simu':
         ts = np.array(ts)
         ys = np.vstack(ys).T
+        yps = np.vstack(yps).T
+    elif t_eval is None and solver.h_info == 'from previous simu':
+        ts = np.array(ts)
+        ys = np.vstack(ys).T
+        yps = np.vstack(yps).T
+        ys = np.concatenate([y_h,ys],axis=1)
+        yps = np.concatenate([yp_h,yps],axis=1)
     else:
         ts = np.hstack(ts)
         ys = np.hstack(ys)
-
     if t_eval is None:
         sol = ContinuousExt(ts, interpolants)
     else:
         sol = ContinuousExt(ti, interpolants)
-
-    return DdeResult(t=ts, y=ys, sol=sol, t_events=t_events, y_events=y_events,
+    return DdeResult(t=ts, y=ys, yp=yps, sol=sol,
+                     discont=solver.discont,
+                     t_events=t_events, y_events=y_events,
                      nfev=solver.nfev, njev=solver.njev, nlu=solver.nlu,
+                     nOverlap=solver.nOverlap, nfailed=solver.nfailed,
                      status=status, message=message, success=status >= 0)
