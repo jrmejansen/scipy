@@ -70,35 +70,29 @@ err_mat_ju = np.abs(y_mat_ju - y_ju)/y_ju
 err_dev_ju = np.abs(y_dev_ju - y_ju)/y_ju
 
 
-plt.figure(figsize=(18,14))
+plt.figure()
 plt.plot(t, y, 'b',label='scipy-dev y(t)')
 plt.plot(t, yp, 'b--', label="scipy-dev y'(t)")
 plt.plot(t_mat, y_mat, 'r', label='matlab y(t)')
 plt.plot(t_mat, yp_mat, 'r--', label="matlab y'(t)")
 plt.plot(t_ju, y_ju, 'g',label='julia y(t)')
-
 plt.legend()
+plt.savefig('testFigure/mackeyGlass/y')
 
-plt.figure(figsize=(18,14))
+plt.figure()
 plt.plot(t_ju, err_mat_ju, label='err mat / ju')
 plt.plot(t_ju, err_dev_ju, 'o', label='err dev / ju')
 plt.legend()
 plt.xlabel('t')
 plt.ylabel(r'$\varepsilon$')
 plt.title('error relative')
+plt.savefig('testFigure/mackeyGlass/error.png')
 
-plt.figure(figsize=(18,14))
+plt.figure()
 plt.plot(t[:-1],np.diff(t),'-o',label='dt scipy-dev')
 plt.plot(t_ju[:-1],np.diff(t_ju),'-o',label='dt julia')
-
-plt.plot(t_ddeMoi[:-1],np.diff(t_ddeMoi),'-o',label='dt ddeMOI')
+#plt.plot(t_ddeMoi[:-1],np.diff(t_ddeMoi),'-o',label='dt ddeMOI')
 plt.plot(t_mat[:-1],np.diff(t_mat),'-o',label='dt matlab solver')
 plt.legend()
-
+plt.savefig('testFigure/mackeyGlass/dt.png')
 plt.show()
-
-
-
-
-
-

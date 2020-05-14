@@ -4,9 +4,12 @@ SciPy
 
 A development of delay differential equations solver in SciPy from a fork of version '1.5.0.dev0+912c54c'.
 
-The solver is derived from solve_ivp function from scipy/integrate._ivp
+The solver is derived from solve_ivp function from scipy/integrate._ivp. 
+You will find the folder scipy/integrate/_dde where all the changes have been made. 
+The function in named ***solve_dde*** in *scipy/integrate/_dde/dde.py*
+
 It use the method of step with embedded Runge-Kutta RK23 or RK45 at this time.
-Evaluation of delays term is realized with continuous extension  of RK integration.
+Evaluation of delay terms is realized with continuous extension  of RK integration.
 
 ## Sources
 https://www.radford.edu/~thompson/webddes/index.html
@@ -43,6 +46,11 @@ plt.plot(t, y, label='scipy-dev y(t)')
 plt.legend()
 ```
 
+
+
+### diverging problem
+![](testFigure/solDiv/error.png)
+![](testFigure/solDiv/y.png)
 
 ### rocking suitcase model
 
@@ -95,7 +103,6 @@ y = sol23.y[0,:]
 yp = sol23.y[1,:]
 ```
 
-![](testFigure/suitecase/phase_diag.png)
 
 ```py
 plt.figure(figsize=(18,14))
@@ -106,7 +113,24 @@ plt.plot(y, yp, label='phase diagram')
 plt.legend()
 
 ```
+![](testFigure/suitecase/phase_diag.png)
 
 ### virus model
 
+```py
+
+```
+![](testFigure/virus/virus.png)
+
+
+### Mackey Glass
+
+```py
+
+```
+
+
+![](testFigure/mackeyGlass/y.png)
+![](testFigure/mackeyGlass/error.png)
+![](testFigure/mackeyGlass/dt.png)
 

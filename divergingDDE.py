@@ -107,7 +107,7 @@ tspan = [t0, tf]
 delays = [tau]
 
 def h(t):
-    return 1
+    return [1]
 
 t1 = time.time()
 sol23 = solve_dde(fun, tspan, delays, y0, h, method='RK23', atol=atol, rtol=rtol)
@@ -156,18 +156,18 @@ err_mat = np.abs(np.abs(y_mat - ana_mat) / ana_mat)
 
 
 
-plt.figure(figsize=(18,14))
+plt.figure()
 plt.plot(t, y, label='scipy-dev y(t)')
 plt.plot(t, yp, label="scipy-dev y'(t)")
 plt.plot(t_mat, y_mat, 'o', label='matlab y(t)')
 plt.plot(t_mat, yp_mat, 'o', label="matlab y'(t)")
 plt.legend()
-plt.savefig('testFigure/solDiv/y_yp')
+plt.savefig('testFigure/solDiv/y')
 
-plt.figure(figsize=(18,14))
+plt.figure()
 plt.plot(t, err_spdev, label='scipy-dev err23')
 plt.plot(t45, err_spdev45, label='scipy-dev err45')
-plt.plot(t_ddeMoi, err_ddeMoi, label='ddeMoi err')
+#plt.plot(t_ddeMoi, err_ddeMoi, label='ddeMoi err')
 plt.plot(t_mat, err_mat, label="matlab err")
 plt.legend()
 plt.savefig('testFigure/solDiv/error')
@@ -181,7 +181,7 @@ plt.title('phase graph')
 
 plt.figure(figsize=(18,14))
 plt.plot(t[:-1],np.diff(t),'-o',label='dt scipy-dev')
-plt.plot(t_ddeMoi[:-1],np.diff(t_ddeMoi),'-o',label='dt ddeMOI')
+#plt.plot(t_ddeMoi[:-1],np.diff(t_ddeMoi),'-o',label='dt ddeMOI')
 plt.plot(t_mat[:-1],np.diff(t_mat),'-o',label='dt matlab solver')
 plt.legend()
 plt.savefig('testFigure/solDiv/dt')
