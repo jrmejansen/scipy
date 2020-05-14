@@ -93,7 +93,11 @@ while(sol23.t[-1]<tf):
 t = sol23.t
 y = sol23.y[0,:]
 yp = sol23.y[1,:]
+```
 
+![](testFigure/suitecase/phase_diag.png)
+
+```py
 plt.figure(figsize=(18,14))
 plt.plot(t, y,'o', label='scipy-dev y(0)(t)')
 plt.legend()
