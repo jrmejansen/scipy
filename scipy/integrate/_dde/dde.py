@@ -522,6 +522,12 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None,
         sol = ContinuousExt(ts, interpolants)
     else:
         sol = ContinuousExt(ti, interpolants)
+    if t_eval is None and solver.h_info != 'from previous simu':
+        # if from history input the output file will not take into account
+        # history data 
+        ts = ts[1:]
+        ys = ys[:,1:]
+        yps = yps[:,1:]
     return DdeResult(t=ts, y=ys, yp=yps, sol=sol,
                      discont=solver.discont,
                      t_events=t_events, y_events=y_events,

@@ -109,7 +109,7 @@ tspan = [t0, tf]
 delays = [tau]
 
 def h(t):
-    return 1
+    return [1]
 
 sol = solve_dde(fun, tspan, delays, y0, h, method='RK23', atol=atol, rtol=rtol)
 t2 = time.time()

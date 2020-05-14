@@ -31,17 +31,17 @@ def fun(t,y,Z):
             np.sin(y[0]) - np.sign(y[0]) * gamma * np.cos(y[0]) - beta * y_tau[0]
             + A * np.sin(omega * t + eta)]
 
-def chuteValise(t,y,Z):
+def finalEvent(t,y,Z):
     return np.abs(y[0])-np.pi*.5
-chuteValise.direction = 0 # % All events have to be reported
-chuteValise.terminal = True
+finalEvent.direction = 0 # % All events have to be reported
+finalEvent.terminal = True
 
 def hitGround(t,y,Z):                                     
     return y[0]                            
 hitGround.direction = 0 # % All events have to be reported
 hitGround.terminal = True                                 
 
-events = [chuteValise, hitGround]
+events = [finalEvent, hitGround]
 t1 = time.time()
 sol23 = solve_dde(fun, tspan, delays, y0, y0, method='RK23',
                   atol=atol, rtol=rtol ,events=events)
@@ -52,7 +52,7 @@ mat = [4.5167708185, 9.7511043904, 11.6703836720]
 
 e = 0
 while(sol23.t[-1]<tf):
-    if not (sol23.t_events[0]): # if there is not chuteValise 
+    if not (sol23.t_events[0]): # if there is not finalEvent 
         print('A wheel hit the ground. ',sol23.t[-1],'',mat[e],'',ref[e])
         y0 = [0.0, sol23.y[1,-1]*0.913]
         tspan = [sol23.t[-1],tf]
@@ -67,12 +67,26 @@ t = sol23.t
 y = sol23.y[0,:]
 yp = sol23.y[1,:]
 
+
+path = '/home/jjansen/Bureau/These/recherche/matlab/dde_benchmark/suitcase_dde23.mat'
+import scipy.io as spio
+mat = spio.loadmat(path, squeeze_me=True)
+t_mat = mat['t']
+y_mat = mat['y']
+yp_mat = mat['yp']
+
+
 plt.figure(figsize=(18,14))
 plt.plot(t, y,'o', label='scipy-dev y(0)(t)')
 plt.legend()
 
-plt.figure(figsize=(18,14))
-plt.plot(y, yp, label='phase diagram')
+plt.figure(figsize=(14,12))
+plt.plot(y, yp, label='solve_dde')
+plt.plot(y_mat[0,:], y_mat[1,:],'o',markerfacecolor='none', label='dde23 from Matlab')
+plt.xlabel(r'$\theta$', fontsize=20)
+plt.ylabel(r'$\dot{\theta}$', fontsize=20)
 plt.legend()
+plt.savefig('testFigure/suitecase/phase_diag')
 plt.show()
+
 

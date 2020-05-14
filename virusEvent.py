@@ -42,14 +42,11 @@ A = 0.75;
 omega = 1.37;
 eta = np.arcsin(gamma/A);
 
-
 y0 = np.array([5.,.1,1.0])
-
 delays = [tau1,tau10]
 tspan = [t0, tf]
 
 zeros = [zero_y0,zero_y1,zero_y2]
-
 atol = 1e-10
 rtol = 1e-5
 t1 = time.time()
@@ -88,9 +85,15 @@ plt.figure(figsize=(14,10))
 plt.plot(t,y0,'r',label='y0')
 plt.plot(t,y1,'b',label='y1')
 plt.plot(t,y2,'g',label='y2')
-plt.plot(sol23.t_events[0],y0_e,'s r')
-plt.plot(sol23.t_events[1],y1_e,'s b')
-plt.plot(sol23.t_events[2],y2_e,'s g')
+plt.plot(sol23.t_events[0],y0_e,'s r', markersize=10)
+plt.plot(sol23.t_events[1],y1_e,'s b', markersize=10)
+plt.plot(sol23.t_events[2],y2_e,'s g', markersize=10)
+plt.plot(t0_e_mat,y0_e_mat,'C1 o',label='matlab')
+plt.plot(t1_e_mat,y1_e_mat,'C1 o')
+plt.plot(t2_e_mat,y2_e_mat,'C1 o')
+plt.xlabel(r'$t$')
+plt.ylabel(r'$y$')
 plt.legend()
+plt.savefig('testFigure/virus/virus')
 plt.show()
 
