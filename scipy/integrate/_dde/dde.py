@@ -393,12 +393,10 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None,
         yps = [solver.yp_oldest,fun(t0,y0,solver.Z0)]
         interpolants = [solver.h]
     elif t_eval is None and solver.h_info == 'from previous simu':
+        (ts, ys, yps) = solver.solver_old.datas
         t_h = solver.solver_old.t
         y_h = solver.solver_old.y
         yp_h = solver.solver_old.yp
-        ts = solver.solver_old.t.tolist()
-        ys = []
-        yps = []
         interpolants = solver.h.interpolants
     else:
         ts = []
@@ -505,30 +503,26 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None,
     if t_events is not None:
         t_events = [np.asarray(te) for te in t_events]
         y_events = [np.asarray(ye) for ye in y_events]
-    if t_eval is None and solver.h_info != 'from previous simu':
-        ts = np.array(ts)
-        ys = np.vstack(ys).T
-        yps = np.vstack(yps).T
-    elif t_eval is None and solver.h_info == 'from previous simu':
-        ts = np.array(ts)
-        ys = np.vstack(ys).T
-        yps = np.vstack(yps).T
-        ys = np.concatenate([y_h,ys],axis=1)
-        yps = np.concatenate([yp_h,yps],axis=1)
-    else:
-        ts = np.hstack(ts)
-        ys = np.hstack(ys)
     if t_eval is None:
-        sol = ContinuousExt(ts, interpolants)
+        t_arr = np.array(ts)
+        y_arr = np.vstack(ys).T
+        yp_arr = np.vstack(yps).T
+    else:
+        t_arr = np.hstack(ts)
+        y_arr = np.hstack(ys)
+        yp_arr = np.hstack(yps)
+    if t_eval is None:
+        sol = ContinuousExt(t_arr, interpolants)
     else:
         sol = ContinuousExt(ti, interpolants)
     if t_eval is None and solver.h_info != 'from previous simu':
         # if from history input the output file will not take into account
         # history data 
-        ts = ts[1:]
-        ys = ys[:,1:]
-        yps = yps[:,1:]
-    return DdeResult(t=ts, y=ys, yp=yps, sol=sol,
+        t_arr = t_arr[1:]
+        y_arr = y_arr[:,1:]
+        yp_arr = yp_arr[:,1:]
+    datas = (ts, ys, yps)
+    return DdeResult(t=t_arr, y=y_arr, yp=yp_arr, sol=sol, datas=datas,
                      discont=solver.discont,
                      t_events=t_events, y_events=y_events,
                      nfev=solver.nfev, njev=solver.njev, nlu=solver.nlu,

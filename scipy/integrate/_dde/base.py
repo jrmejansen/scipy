@@ -138,11 +138,11 @@ class DdeSolver(object):
 
     def __init__(self, fun, t0, y0, t_bound, h,
                  delays):
+        self._fun, self.y, self.h, self.h_info = check_arguments(fun,y0,h)
         self.t_old = None
         self.t0 = t0
         self.t = t0
         self.t_bound = t_bound
-        self._fun, self.y, self.h, self.h_info = check_arguments(fun,y0,h)
         self.n = self.y.size
 
         self.direction = np.sign(t_bound - t0) if t_bound != t0 else 1
