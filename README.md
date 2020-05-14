@@ -46,7 +46,7 @@ plt.legend()
 
 ### rocking suitcase model
 
-```
+```py
 t0 = 0.0
 tf = 12
 tspan = [t0, tf]
@@ -100,7 +100,9 @@ plt.legend()
 plt.figure(figsize=(18,14))
 plt.plot(y, yp, label='phase diagram')
 plt.legend()
+
 ```
 
 ### virus model
+
 
