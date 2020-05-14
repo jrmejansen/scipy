@@ -115,8 +115,11 @@ plt.legend()
 ```
 
 Kind of Event:               scipy-dev         dde23       reference
+
 A wheel hit the ground.  4.516774682927172  4.5167708185  4.516757065
+
 A wheel hit the ground.  9.751129253909937  9.7511043904  9.751053145
+
 The suitcase fell over.  11.670391711563916  11.670383672  11.670393497
 
 
