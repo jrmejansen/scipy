@@ -26,9 +26,9 @@ https://www.radford.edu/~thompson/webddes/ddeevtwhite.html
 
 ### converging problem
 
-\\[y'(t) = y(t-1) \\
-y(t0)=y_0 \\
-y(t<t0) = y_0 \\]
+y'(t) = y(t-1) \
+y(t0)=y_0 \
+y(t<t0) = y_0 \
 
 ```py
 import scipy
@@ -58,22 +58,22 @@ plt.plot(t, y, label='scipy-dev y(t)')
 plt.legend()
 ```
 
-![](figures/solConv/error.png)
-![](figures/solConv/y.png)
-![](figures/solConv/dt.png)
+![](DDEs_models_test/figures/solConv/error.png)
+![](DDEs_models_test/figures/solConv/y.png)
+![](DDEs_models_test/figures/solConv/dt.png)
 
 
 ### diverging problem
 same as converging problem but with +
 
-\\[y'(t) = y(t-1) \\
-y(t0)=y_0 \\
-y(t<t0) = y_0 \\]
+y'(t) = y(t-1) \
+y(t0)=y_0 \
+y(t<t0) = y_0 \
 
 
-![](figures/solDiv/error.png)
-![](figures/solDiv/y.png)
-![](figures/solDiv/dt.png)
+![](DDEs_models_test/figures/solDiv/error.png)
+![](DDEs_models_test/figures/solDiv/y.png)
+![](DDEs_models_test/figures/solDiv/dt.png)
 
 ### rocking suitcase model
 
@@ -144,7 +144,7 @@ A wheel hit the ground.  9.751129253909937  9.7511043904  9.751053145\
 The suitcase fell over.  11.670391711563916  11.670383672  11.670393497\
 
 
-![](figures/suitecase/phase_diag.png)
+![](DDEs_models_test/figures/suitecase/phase_diag.png)
 
 ### Kermack-McKendrick an infectious disease model
 
@@ -212,7 +212,7 @@ sol23 = solve_dde(fun, tspan, delays, y0, y0, method='RK23', events=zeros, atol=
 
 
 
-![](figures/virus/virus.png)
+![](DDEs_models_test/figures/virus/virus.png)
 
 
 
@@ -223,7 +223,7 @@ sol23 = solve_dde(fun, tspan, delays, y0, y0, method='RK23', events=zeros, atol=
 ```
 
 
-![](figures/mackeyGlass/y.png)
-![](figures/mackeyGlass/error.png)
-![](figures/mackeyGlass/dt.png)
+![](DDEs_models_test/figures/mackeyGlass/y.png)
+![](DDEs_models_test/figures/mackeyGlass/error.png)
+![](DDEs_models_test/figures/mackeyGlass/dt.png)
 
