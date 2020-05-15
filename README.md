@@ -20,6 +20,7 @@ pip freeze > requirements.txt
 
 ## Sources
 https://www.radford.edu/~thompson/webddes/index.html\
+
 https://www.radford.edu/~thompson/webddes/ddeevtwhite.html
 
 ## Benchmarks
