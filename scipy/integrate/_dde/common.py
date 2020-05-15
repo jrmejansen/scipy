@@ -203,7 +203,7 @@ class ContinuousExt(object):
                 va = history(t)
             elif(isinstance(history, np.ndarray)):
                 # from a cte
-                va = history[0]
+                va = history
             return va
         else:
             return self.interpolants[segment](t)

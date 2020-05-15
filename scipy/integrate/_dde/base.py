@@ -189,6 +189,9 @@ class DdeSolver(object):
         if( self.h_info == 'from tuple'):
             (self.t_past, self.y_past, self.yp_past) = self.h
             self.t_oldest = self.t_past[0]
+            if(self.t_oldest < (self.t0 - self.delayMax)):
+                    raise("history tuple give in history not enough to describe\
+                            all past values")
             self.y_oldest = self.y_past[:,0]
             self.yp_oldest = self.yp_past[:,0]
             self.h = []

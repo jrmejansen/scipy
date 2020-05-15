@@ -90,8 +90,11 @@ def configuration(parent_package='',top_path=None):
                          **lapack_opt)
 
     config.add_subpackage('_ivp')
+    
+    config.add_subpackage('_dde')
 
     config.add_data_dir('tests')
+
     return config
 
 

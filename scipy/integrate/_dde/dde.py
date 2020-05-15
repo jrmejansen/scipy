@@ -2,7 +2,7 @@ import inspect
 import numpy as np
 #from .bdf import BDF
 #from .radau import Radau
-from .rk import RK23, RK45, DOP853, Vern6
+from .rk import RK23, RK45, Vern6
 #from .lsoda import LSODA
 from scipy.optimize import OptimizeResult
 from .common import EPS, ContinuousExt
@@ -11,9 +11,7 @@ from .base import DdeSolver
 
 METHODS = {'RK23': RK23,
            'RK45': RK45,
-           'DOP853': DOP853,
-           'Vern6': Vern6,
-           #'BDF': BDF,
+           'Vern6': Vern6
            }
 
 
