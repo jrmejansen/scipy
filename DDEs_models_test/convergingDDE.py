@@ -82,6 +82,7 @@ plt.plot(y_mat, yp_mat, 'o', label='matlab')
 plt.xlabel('y')
 plt.ylabel('dydt')
 plt.title('phase graph')
+plt.savefig('figures/solConv/phase')
 
 plt.figure()
 plt.plot(t[:-1],np.diff(t),'-o',label='dt scipy-dev')
