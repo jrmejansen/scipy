@@ -23,18 +23,12 @@ y0 = [1.0]
 def h(t):
     return [1.]
 
-t1 = time.time()
 sol23 = solve_dde(fun, tspan, delays, y0, h, method='RK23', atol=atol, rtol=rtol)
-t2 = time.time()
-print('for RK23 Elapsed time is %s seconds' % (t2-t1))
 t = sol23.t
 y = sol23.y[0,:]
 yp = sol23.yp[0,:]
 
-t1 = time.time()
 sol45 = solve_dde(fun, tspan, delays, y0, h, method='RK45', atol=atol, rtol=rtol)
-t2 = time.time()
-print('for RK45 Elapsed time is %s seconds' % (t2-t1))
 t45 = sol45.t
 y45 = sol45.y[0,:]
 yp45 = sol45.yp[0,:]
@@ -62,33 +56,36 @@ err_mat_ju = np.abs(y_mat_ju - y_ju)/y_ju
 err_dev_ju = np.abs(y_dev_ju - y_ju)/y_ju
 
 plt.figure()
-plt.plot(y,yp)
+plt.plot(y,yp,'o', label='solve_dde')
+plt.plot(y_mat,yp_mat,label='dde23')
 plt.xlabel('y')
 plt.ylabel('yp')
+plt.legend()
 plt.savefig('figures/mackeyGlass/phase')
+plt.savefig('phase')
 
 plt.figure()
-plt.plot(t_mat, y_mat, 'r o', label='matlab y(t)')
-plt.plot(t_ju, y_ju, 'g s',label='julia y(t)')
-plt.plot(t, y, 'b *',label='scipy-dev y(t)')
+plt.plot(t, y, '*',label='solve_dde')
+plt.plot(t_mat, y_mat, 'o', label='dde23')
+plt.plot(t_ju, y_ju, 's',label='julia BS3')
 plt.xlabel(r'$t$')
 plt.ylabel(r'$y$')
 plt.legend()
 plt.savefig('figures/mackeyGlass/y')
 
 plt.figure()
-plt.plot(t_ju, err_mat_ju, label='err mat / ju')
-plt.plot(t_ju, err_dev_ju, 'o', label='err dev / ju')
+plt.plot(t_ju, err_mat_ju, label='dde23 / julia BS3')
+plt.plot(t_ju, err_dev_ju, 'o', label='solve_dde / julia BS3')
 plt.legend()
 plt.xlabel(r'$t$')
 plt.ylabel(r'$\varepsilon$')
-plt.title('error relative')
+plt.title('relatove errors')
 plt.savefig('figures/mackeyGlass/error.png')
 
 plt.figure()
 plt.plot(t[:-1],np.diff(t),'-o',label='solve_dde')
-plt.plot(t_ju[:-1],np.diff(t_ju),'-o',label='julia DDE BS3')
 plt.plot(t_mat[:-1],np.diff(t_mat),'-o',label='matlab dde23')
+plt.plot(t_ju[:-1],np.diff(t_ju),'-o',label='julia DDE BS3')
 plt.legend()
 plt.xlabel(r'$t$')
 plt.ylabel(r'$\Delta t$')

@@ -21,13 +21,11 @@ def h(t):
     return [1]
 
 sol23 = solve_dde(fun, tspan, delays, y0, h, method='RK23', atol=atol, rtol=rtol)
-print('for RK23 Elapsed time is %s seconds' % (t2-t1))
 t = sol23.t
 y = sol23.y[0,:]
 yp = sol23.yp[0,:]
 
 sol45 = solve_dde(fun, tspan, delays, y0, h, method='RK45', atol=atol, rtol=rtol)
-print('for RK45 Elapsed time is %s seconds' % (t2-t1))
 t45 = sol45.t
 y45 = sol45.y[0,:]
 yp45 = sol45.yp[0,:]
@@ -73,7 +71,7 @@ err_mat = np.abs(np.abs(y_mat - ana_mat) / ana_mat)
 
 plt.figure()
 plt.plot(t, ana_spdev, label='analytic')
-plt.plot(t, y, label='solve_dde')
+plt.plot(t, y, label='solve_dde RK23')
 plt.plot(t_mat, y_mat, 'o', label='matlab dde23')
 plt.xlabel(r'$t$')
 plt.xlabel(r'$y$')
@@ -81,24 +79,27 @@ plt.legend()
 plt.savefig('figures/solDiv/y')
 
 plt.figure()
-plt.plot(t, err_spdev, label='scipy-dev err23')
-plt.plot(t45, err_spdev45, label='scipy-dev err45')
+plt.plot(t, err_spdev, label='solve_dde RK23')
+plt.plot(t45, err_spdev45, label='solve_dde RK45')
 plt.plot(t_mat, err_mat, label="matlab err")
 plt.xlabel(r'$t$')
 plt.ylabel(r'$\varepsilon$')
 plt.legend()
+plt.title('relative errors')
 plt.savefig('figures/solDiv/error')
 
 plt.figure()
-plt.plot(y, yp, label='scipy-dev')
-plt.plot(y_mat, yp_mat, 'o', label='matlab')
+plt.plot(y, yp, label='solve_dde RK23')
+plt.plot(y_mat, yp_mat, 'o', label='dde23')
 plt.xlabel('y')
 plt.ylabel('dydt')
+plt.legend()
 plt.title('phase graph')
 
 plt.figure()
-plt.plot(t[:-1],np.diff(t),'-o',label='dt scipy-dev')
-plt.plot(t_mat[:-1],np.diff(t_mat),'-o',label='dt matlab solver')
+plt.plot(t[:-1],np.diff(t),'-o',label='solve_dde RK23')
+plt.plot(t45[:-1],np.diff(t45),'-o',label='solve_dde RK45')
+plt.plot(t_mat[:-1],np.diff(t_mat),'-o',label='dde23')
 plt.legend()
 plt.ylabel(r'$\Delta t$')
 plt.xlabel(r'$t$')

@@ -75,6 +75,16 @@ y(t<t0) = y_0 \
 ![](DDEs_models_test/figures/solDiv/y.png)
 ![](DDEs_models_test/figures/solDiv/dt.png)
 
+### 2 delays 
+
+y'(t) = -y(t-1/3) - y(t-3/2)\
+y(t0)=y_0 \
+y(t<t0) = y_0 \
+![](DDEs_models_test/figures/2delays/error.png)
+![](DDEs_models_test/figures/2delays/y.png)
+![](DDEs_models_test/figures/2delays/dt.png)
+
+
 ### rocking suitcase model
 
 ```py
