@@ -2,7 +2,7 @@ import inspect
 import numpy as np
 #from .bdf import BDF
 #from .radau import Radau
-from .rk import RK23, RK45, Vern6
+from .rk import RK23, RK45
 #from .lsoda import LSODA
 from scipy.optimize import OptimizeResult
 from .common import EPS, ContinuousExt
@@ -10,8 +10,7 @@ from .base import DdeSolver
 
 
 METHODS = {'RK23': RK23,
-           'RK45': RK45,
-           'Vern6': Vern6
+           'RK45': RK45
            }
 
 
@@ -84,6 +83,8 @@ def handle_events(sol, sol_delay, events, active_events, is_terminal, t_old, t):
     sol : DenseOutput
         Function ``sol(t)`` which evaluates an ODE solution between `t_old`
         and  `t`.
+    sol_delay : 
+        Function which evaluate past value of the solution Z[:,i]
     events : list of callables, length n_events
         Event functions with signatures ``event(t, y)``.
     active_events : ndarray

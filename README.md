@@ -2,29 +2,42 @@ DDE Solver : ***solve_dde***
 =====
 
 
-A development of delay differential equations solver in SciPy from a fork of version '1.5.0.dev0+912c54c'.
+A development of delay differential equations solver in SciPy 
+from a fork of version '1.5.0.dev0+912c54c' within the branch *ddeSolver*.
 
-The solver is derived from solve_ivp function from scipy/integrate._ivp. 
+The solver *solve_dde* is derived from *solve_ivp* function from scipy/integrate._ivp. 
 You will find the folder scipy/integrate/_dde where all the changes have been made. 
 The function in named ***solve_dde*** in *scipy/integrate/_dde/dde.py*
 
-It use the method of step with embedded Runge-Kutta RK23 or RK45 at this time.
-Evaluation of delay terms is realized with continuous extension  of RK integration.
+## Numerical methods
+*solve_dde* use the method of step with embedded Runge-Kutta RK23 or RK45 integration.
+Evaluation of delay terms is realized with continuous extension (or denseOutput) of RK integrator.
+Location of events is available.
 
 ## Requirement 
 All requirement for this development are listed in
 ```console
-pip freeze > requirements.txt
+requirements.txt
 ```
-
-
 ## Sources
-https://www.radford.edu/~thompson/webddes/index.html\
+The sources used in this work are: 
+1. L.F. Shampine, S. Thompson, 2000, Solving DDEs in MATLAB
+2. L.F. Shampine, S. Thompson, 2000, Solving Delay Differential Equations with dde23.pdf
+3. Oberlet 1981 Numerical Treatment of Delay Differential Equations by Hermite Interpolation
+4. L.F. Shampine, S. Thompson, Chapter, 2009, Numerical Solution of Delay Differential Equations
 
+Sources relevant to DDE:
+1. Bellen 2002 Numerical methods for delay differential equations
+2. S. Thompson, L.F. Shampine, 2004, A Friendly Fortran DDE Solver
+
+In Oberlet 1981 and Shampine, there are lots of numerical examples used in benchmarks.
+
+Links :\
+https://www.radford.edu/~thompson/webddes/index.html\
 https://www.radford.edu/~thompson/webddes/ddeevtwhite.html
 
 ## Benchmarks
-
+All presented benchmarks are in the folder *DDEs_models_test/*
 ### converging problem
 
 y'(t) = y(t-1) \
@@ -206,6 +219,30 @@ atol = 1e-10
 rtol = 1e-5
 sol23 = solve_dde(fun, tspan, delays, y0, y0, method='RK23', events=zeros, atol=atol, rtol=rtol)
 
+t = sol23.t                                                              
+y0 = sol23.y[0,:]                                                        
+y1 = sol23.y[1,:]                                                        
+y2 = sol23.y[2,:]                                                        
+                                                                         
+y0_e = sol23.y_events[0][:,0]                                            
+y1_e = sol23.y_events[1][:,1]                                            
+y2_e = sol23.y_events[2][:,2]                                            
+                                                                         
+import scipy.io as spio                                                  
+path_mat = 'data_dde23/virusEvents.mat'                                  
+mat = spio.loadmat(path_mat, squeeze_me=True)                            
+t0_e_mat = mat['x1']                                                     
+t1_e_mat = mat['x2']                                                     
+t2_e_mat = mat['x3']                                                     
+                                                                         
+te_mat = [t0_e_mat, t1_e_mat, t2_e_mat]                                  
+                                                                         
+for i in range(len(sol23.t_events)):                                     
+    err = np.abs((sol23.t_events[i] - te_mat[i]) / te_mat[i])            
+    print('     t_event y%s :' % (i))                                    
+    print("         solver_dde method='RK23' = %s" % (sol23.t_events[i]))
+    print('         Matlab dde23 =             %s' % (sol23.t_events[i]))
+  print('         relative error =           %s ' % (err))               
 
 ```
      t_event y0 :

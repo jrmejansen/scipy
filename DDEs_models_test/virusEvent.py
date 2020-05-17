@@ -1,4 +1,3 @@
-import time
 from scipy.integrate import solve_dde
 import matplotlib.pyplot as plt
 import numpy as np
@@ -46,9 +45,7 @@ tspan = [t0, tf]
 zeros = [zero_y0,zero_y1,zero_y2]
 atol = 1e-10
 rtol = 1e-5
-t1 = time.time()
 sol23 = solve_dde(fun, tspan, delays, y0, y0, method='RK23', events=zeros, atol=atol, rtol=rtol)
-t2 = time.time()
 
 t = sol23.t
 y0 = sol23.y[0,:]

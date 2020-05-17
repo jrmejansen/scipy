@@ -126,9 +126,9 @@ class ContinuousExt(object):
     local interpolants. It provides an algorithm to select a right interpolant
     for each given point.
 
-    The interpolants cover the range between `t_min` and `t_max` (see
-    Attributes below). Evaluation outside this interval is not forbidden, but
-    the accuracy is not guaranteed.
+*********************   The interpolants cover the range between `t_min` and `t_max` (see
+    Attributes below). Evaluation outside this interval have to be forbidden, but
+    not yet implemented ***********************************************************
 
     When evaluating at a breakpoint (one of the values in `ts`) a segment with
     the lower index is selected.

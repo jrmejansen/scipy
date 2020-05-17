@@ -4,7 +4,10 @@ from inspect import isfunction
 from scipy.interpolate import CubicHermiteSpline
 
 def check_arguments(fun, y0, h):
-    """Helper function for checking arguments common to all solvers."""
+    """Helper function for checking arguments for solve_dde.
+    Complex problem avoid. The function define the type of history given by the user 
+    see init_history_function
+    """
     y0 = np.asarray(y0)
     if np.issubdtype(y0.dtype, np.complexfloating):
         raise ValueError("`y0` is complex, but the chosen solver does "
@@ -46,8 +49,9 @@ def discontDetection(t0, tf, delays):
     """Discontinuity detection between t0 and tf.
 
     Parameters
-        t0 ():
-        tf ():
+        t0 (): initial time
+        tf (): final time
+        delays (list): list of delays
     ----------
     Returns
     -------
@@ -184,7 +188,8 @@ class DdeSolver(object):
 
     def init_history_function(self):
         """
-        initialisation of past values : t_past, y_past yp_past
+        initialisation of past values according to the type of history function given by the user
+        i.e. history as a function / tuple / constant / previous computation
         """
         if( self.h_info == 'from tuple'):
             (self.t_past, self.y_past, self.yp_past) = self.h
@@ -218,6 +223,9 @@ class DdeSolver(object):
 
 
     def delaysEval(self,t):
+        """ Z[:,i] is the evaluation of the solution a past time t-delays[i].
+            from the value of t-delays[i], Z[:,i] can by evaluate by several ways
+        """
         Z = np.zeros((self.n,self.Ndelays))
         t_delays = t - np.asarray(self.delays)
         for k in range(self.Ndelays):
