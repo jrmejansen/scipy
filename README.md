@@ -12,6 +12,9 @@ The function in named ***solve_dde*** in *scipy/integrate/_dde/dde.py*
 ## Numerical methods
 *solve_dde* use the method of step with embedded Runge-Kutta RK23 or RK45 integration.
 Evaluation of delay terms is realized with continuous extension (or denseOutput) of RK integrator.
+Discontinuity tracking is made with location of discontinuity at initialization
+of the solver (as solver_dde handles only constant lags) and modification of the time step 
+when integration is close to a discontinuity.
 Location of events is available.
 
 ## Requirement 
