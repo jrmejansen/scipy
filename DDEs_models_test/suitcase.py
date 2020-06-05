@@ -37,6 +37,7 @@ hitGround.direction = 0 # % All events have to be reported
 hitGround.terminal = True                                 
 
 events = [finalEvent, hitGround]
+print('y0', y0)
 sol23 = solve_dde(fun, tspan, delays, y0, y0, method='RK23',
                   atol=atol, rtol=rtol ,events=events)
 print("\nKind of Event:               scipy-dev         dde23       reference ")
@@ -69,10 +70,11 @@ yp_mat = mat['yp']
 
 plt.figure(figsize=(18,14))
 plt.plot(t, y,'o', label='scipy-dev y(0)(t)')
+plt.plot(t_mat, y_mat[0,:],'-', label='scipy-dev y(0)(t)')
 plt.legend()
 
 plt.figure(figsize=(14,12))
-plt.plot(y, yp, label='solve_dde')
+plt.plot(y, yp, 'o-', label='solve_dde')
 plt.plot(y_mat[0,:], y_mat[1,:],'o',markerfacecolor='none', label='dde23 from Matlab')
 plt.xlabel(r'$\theta$', fontsize=20)
 plt.ylabel(r'$\dot{\theta}$', fontsize=20)

@@ -152,7 +152,7 @@ def find_active_events(g, g_new, direction):
     return np.nonzero(mask)[0]
 
 
-def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None,
+def solve_dde(fun, t_span, delays, y0, h, method='RK23', t_eval=None,
               events=None, args=None, **options):
     """Solve an -----------------------------------------.
 
@@ -383,19 +383,15 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None,
 
     if method in METHODS:
         method = METHODS[method]
-
     solver = method(fun, t0, y0, h, tf, delays, **options)
 
     if t_eval is None and solver.h_info != 'from previous simu':
-        ts = [solver.t_oldest, t0]
-        ys = [solver.y_oldest, y0]
+        ts = [solver.t_oldest, solver.t]
+        ys = [solver.y_oldest, solver.y]
         yps = [solver.yp_oldest,fun(t0,y0,solver.Z0)]
         interpolants = [solver.h]
     elif t_eval is None and solver.h_info == 'from previous simu':
         (ts, ys, yps) = solver.solver_old.datas
-        t_h = solver.solver_old.t
-        y_h = solver.solver_old.y
-        yp_h = solver.solver_old.yp
         interpolants = solver.h.interpolants
     else:
         ts = []
@@ -514,12 +510,12 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK45', t_eval=None,
         sol = ContinuousExt(t_arr, interpolants)
     else:
         sol = ContinuousExt(ti, interpolants)
-    if t_eval is None and solver.h_info != 'from previous simu':
-        # if from history input the output file will not take into account
-        # history data 
-        t_arr = t_arr[1:]
-        y_arr = y_arr[:,1:]
-        yp_arr = yp_arr[:,1:]
+    # do not return history values to the user 
+    t_arr = t_arr[1:]
+    y_arr = y_arr[:,1:]
+    yp_arr = yp_arr[:,1:]
+    # datas useful for restart integration from values instead of
+    # sol cotinous extension
     datas = (ts, ys, yps)
     return DdeResult(t=t_arr, y=y_arr, yp=yp_arr, sol=sol, datas=datas,
                      discont=solver.discont,
