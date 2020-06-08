@@ -227,7 +227,8 @@ class DdeSolver(object):
 
 
     def delaysEval(self,t):
-        """ Z[:,i] is the evaluation of the solution a past time t-delays[i].
+        """ Z[:,i] is the evaluation of the solution a past time:  
+            Z[:,i] = y(t-delays[i]).
             from the value of t-delays[i], Z[:,i] can by evaluate by several ways
         """
         Z = np.zeros((self.n,self.Ndelays))

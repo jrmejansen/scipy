@@ -388,7 +388,7 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', t_eval=None,
     if t_eval is None and solver.h_info != 'from previous simu':
         ts = [solver.t_oldest, solver.t]
         ys = [solver.y_oldest, solver.y]
-        yps = [solver.yp_oldest,fun(t0,y0,solver.Z0)]
+        yps = [solver.yp_oldest, solver.f]
         interpolants = [solver.h]
     elif t_eval is None and solver.h_info == 'from previous simu':
         (ts, ys, yps) = solver.solver_old.datas
@@ -461,7 +461,8 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', t_eval=None,
                     status = 1
                     t = roots[-1]
                     y = sol(t)
-
+                    Z = solver.delaysEval(t)
+                    yp = solver.fun(t,y,Z)
             g = g_new
 
         if t_eval is None:
