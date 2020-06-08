@@ -70,40 +70,37 @@ class RungeKutta(DdeSolver):
         step_rejected = False
 
         while not step_accepted:
-            # bool for killing discontinuity
-            killDiscont = False
+            # bool to locate next discont and adapt time step
+            isCloseToDiscont = False
 
             if h_abs < min_step:
                 return False, self.TOO_SMALL_STEP
 
             h = h_abs * self.direction
             t_new = t + h
-
             if self.direction * (t_new - self.t_bound) > 0:
                 t_new = self.t_bound
             else:
                 # length to next discontinuity
                 len2discont = self.discont[self.nxtDisc] - t
                 isCloseToDiscont = 1.1 * h >= len2discont
-                #print('len2discount=',len2discont)
-                #print('self.nxtDisc=', self.nxtDisc)
-                #print('next discont=', self.discont[self.nxtDisc])
-                #print('isCloseToDiscont',isCloseToDiscont)
                 if(isCloseToDiscont):
                     h = len2discont
                     t_new = self.discont[self.nxtDisc]
-                    killDiscont = True # useless no ?
-                    self.nxtDisc = self.nxtDisc + 1
 
             h = t_new - t
             h_abs = np.abs(h)
-
 
             y_new, f_new = self.rk_step(t, y, self.f, h)
             scale = atol + np.maximum(np.abs(y), np.abs(y_new)) * rtol
             error_norm = self._estimate_error_norm(self.K, h, scale)
 
             if error_norm < 1:
+                if(isCloseToDiscont):
+                    # if we were close to a discont and the adpatation line 92
+                    # is sufficient to have error_norm < 1, then we target the 
+                    # next discont
+                    self.nxtDisc += 1
                 if error_norm == 0:
                     factor = MAX_FACTOR
                 else:

@@ -149,6 +149,11 @@ class DdeSolver(object):
         self.t_bound = t_bound
         self.n = self.y.size
 
+        self.delays = delays
+        self.Ndelays = len(delays)
+        self.delayMin = min(self.delays)
+        self.delayMax = max(self.delays)
+
         self.direction = np.sign(t_bound - t0) if t_bound != t0 else 1
         self.status = 'running'
         if(self.h_info != 'from previous simu'):
@@ -164,16 +169,14 @@ class DdeSolver(object):
             self.nfailed = self.h.nfailed
             self.nOverlap = self.h.nOverlap
 
-
-        self.delays = delays
-        self.Ndelays = len(delays)
-        self.delayMin = min(self.delays)
-        self.delayMax = max(self.delays)
+            if(np.abs(self.t - self.h.t[-1])>1e-8):
+                print('t0 given in tspan = %s  tf last simu = %s' % (self.t, self.h.t[-1]))
+                raise ValueError("error tspan t0 is not the tf of the previous"
+                                 "computation")
 
         (self.nxtDisc, self.discont) = discontDetection(t0, t_bound, delays)
         self.init_history_function()
 
-        self.Z0 = self.delaysEval(self.t)
         fun_single = self._fun
 
         def fun(t, y, Z):
@@ -182,9 +185,10 @@ class DdeSolver(object):
 
         self.fun = fun
         self.fun_single = fun_single
+        # init delay unknows y(t-tau_i) at t0
+        self.Z0 = self.delaysEval(self.t)
 
         self.f = self.fun(self.t, self.y, self.Z0) # initial value of f(t0,y0,Z0)
-
 
     def init_history_function(self):
         """
