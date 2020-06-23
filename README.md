@@ -138,12 +138,19 @@ hitGround.terminal = True
 events = [finalEvent, hitGround]
 sol23 = solve_dde(fun, tspan, delays, y0, y0, method='RK23',atol=atol, rtol=rtol ,events=events)
 print("\nKind of Event:               scipy-dev         dde23       reference ")
-ref = [4.516757065, 9.751053145, 11.670393497];
+# ref values of matlab dde23 example script
+ref = [4.516757065, 9.751053145, 11.670393497]
+# computed values from matlab dde23 with same atol & rtol
 mat = [4.5167708185, 9.7511043904, 11.6703836720]
+# from DDE_SOLVER  fortran routine example : Example 4.4.5 Events and Change Routine
+f90 = [4.5167570861630821, 9.7510847727976273, 11.670385883524640]
+
 e = 0
 while(sol23.t[-1]<tf):
     if not (sol23.t_events[0]): # if there is not finalEvent
         print('A wheel hit the ground. ',sol23.t[-1],'',mat[e],'',ref[e])
+        t_val = np.array([sol23.t[-1],mat[e],ref[e],f90[e]])
+        print('relative error to ref   ', np.abs(t_val-ref[e])/ref[e])
         y0 = [0.0, sol23.y[1,-1]*0.913]
         tspan = [sol23.t[-1],tf]
         sol23 = solve_dde(fun, tspan, delays, y0, sol23, method='RK23',
@@ -151,6 +158,8 @@ while(sol23.t[-1]<tf):
         e += 1
     else:
         print("The suitcase fell over. ",sol23.t[-1],'',mat[e],'',ref[e])
+        t_val = np.array([sol23.t[-1],mat[e],ref[e],f90[e]])
+        print('relative error to ref   ', np.abs(t_val-ref[e])/ref[e])
         break
 t = sol23.t
 y = sol23.y[0,:]
