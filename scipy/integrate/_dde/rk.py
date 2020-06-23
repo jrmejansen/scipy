@@ -80,7 +80,7 @@ class RungeKutta(DdeSolver):
             t_new = t + h
             if self.direction * (t_new - self.t_bound) > 0:
                 t_new = self.t_bound
-            else:
+            elif(self.nxtDisc < len(self.discont)):
                 # length to next discontinuity
                 len2discont = self.discont[self.nxtDisc] - t
                 isCloseToDiscont = 1.1 * h >= len2discont
@@ -166,11 +166,11 @@ class RungeKutta(DdeSolver):
         self.K[0] = f
         for s, (a, c) in enumerate(zip(self.A[1:], self.C[1:]), start=1):
             dy = np.dot(self.K[:s].T, a[:s]) * h
-            Z = self.delaysEval(t + c * h)
+            Z = self.eval_y_past(t + c * h)
             self.K[s] = self.fun(t + c * h, y + dy, Z)
 
         y_new = y + h * np.dot(self.K[:-1].T, self.B)
-        Z = self.delaysEval(t + h)
+        Z = self.eval_y_past(t + h)
         f_new = self.fun(t + h, y_new, Z)
 
         self.K[-1] = f_new

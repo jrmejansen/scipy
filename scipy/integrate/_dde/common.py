@@ -1,3 +1,4 @@
+import sys
 from itertools import groupby
 from warnings import warn
 import numpy as np
@@ -148,19 +149,43 @@ class ContinuousExt(object):
     t_min, t_max : float
         Time range of the interpolation.
     """
-    def __init__(self, ts, interpolants):
+    def __init__(self, ts, interpolants, ys):
+        self.discont = False
+        if np.any(np.ediff1d(ts) < EPS):
+            # where is at least 2 identic time in ts
+            self.discont = True
+            # locate duplicate values  
+            # print('type(ts)', type(ts))
+            pos = (np.argwhere(np.ediff1d(ts) < EPS) + 1) # idx of discont val
+            # print('pos', pos)
+            pos = pos[:,0].tolist()
+            # print('pos', pos, 'type pos', type(pos))
+            # save discont values
+            self.t_discont = [ts[i] for i in pos]
+            self.y_discont = [ys[i] for i in pos]
+            # print('self.t_discont', self.t_discont,'self.y_discont', self.y_discont)
+            # del discont values
+            # print('len(ts)', len(ts), 'len(ys)',len(ys))
+            # for k in range(len(pos)):
+                # print('self.t_discont k', self.t_discont[k])
+            ts = [i for j, i in enumerate(ts) if j not in pos]
+            ys =[i for j, i in enumerate(ys) if j not in pos]
+            # print('len(ts)', len(ts), 'len(ys)',len(ys))
         ts = np.asarray(ts)
         d = np.diff(ts)
+        # print('ts',ts, '\nd', d)
         # The first case covers integration on zero segment.
-        if not ((ts.size == 2 and ts[0] == ts[-1])
-                or np.all(d > 0) or np.all(d < 0)):
+        # print('ts[0]==ts[-1]', ts[0]==ts[-1],'ts[0]',ts[0],'ts[-1]',ts[-1],'ts.size == 2',ts.size == 2)
+        # print('(np.all(d > 0)', (np.all(d > 0)), '(np.all(d < 0)', (np.all(d < 0)))
+        incr_decr = (np.all(d > 0) or np.all(d < 0))
+        # print('incr_decr', incr_decr)
+        if not ((ts.size == 2 and ts[0] == ts[-1]) or incr_decr):
             raise ValueError("`ts` must be strictly increasing or decreasing.")
 
         self.n_segments = len(interpolants)
         if ts.shape != (self.n_segments + 1,):
             raise ValueError("Numbers of time stamps and interpolants "
                              "don't match.")
-
         self.ts = ts
         self.interpolants = interpolants
         if ts[-1] >= ts[0]:
@@ -177,6 +202,16 @@ class ContinuousExt(object):
     def _call_single(self, t):
         # Here we preserve a certain symmetry that when t is in self.ts,
         # then we prioritize a segment with a lower index.
+
+        # if discont case + t is a discont 
+        if self.discont and np.any(np.abs(self.t_discont - t) < EPS):
+            print('return particular value')
+            if self.ascending:
+                ind = np.searchsorted(self.t_discont, t, side='left')
+            else:
+                ind = np.searchsorted(self.t_discont, t, side='right')
+            return self.y_discont[ind]
+
         if self.ascending:
             ind = np.searchsorted(self.ts_sorted, t, side='left')
         else:
@@ -223,7 +258,6 @@ class ContinuousExt(object):
             1-D array.
         """
         t = np.asarray(t)
-
         if t.ndim == 0:
             return self._call_single(t)
 
@@ -231,6 +265,10 @@ class ContinuousExt(object):
         reverse = np.empty_like(order)
         reverse[order] = np.arange(order.shape[0])
         t_sorted = t[order]
+
+        if(self.discont and np.any(np.argwhere(np.diff(t_sorted) < EPS))):
+            idxs = np.argwhere(np.diff(t_sorted) < EPS) + 1
+            t = np.delete(t_sorted, idxs)
 
         # See comment in self._call_single.
         if self.ascending:
@@ -247,6 +285,7 @@ class ContinuousExt(object):
         group_start = 0
         for segment, group in groupby(segments):
             group_end = group_start + len(list(group))
+            # added code for history segment
             if(segment==0):
                 Nt = len(t_sorted[group_start:group_end])
                 interp = self.interpolants[segment]
@@ -274,5 +313,24 @@ class ContinuousExt(object):
         ys = np.hstack(ys)
         ys = ys[:, reverse]
 
+        if(self.discont and np.any(np.argwhere(np.diff(t) < EPS))):
+            # adding the discont value at t_discont
+            # print('t_sorted', t_sorted)
+            t_tmp = t_sorted.copy()
+            for k in range(len(idxs)):
+                idx = np.searchsorted(t_tmp, self.t_discont[k]) + 1
+                t_tmp = np.insert(t_tmp, idx, self.t_discont[k])
+                ys = np.insert(ys, idx, self.y_discont[k], axis=1)
         return ys
 
+    def reorganize(self, t0_new):
+        """
+            used file base.py, function : init_history_function
+        """
+        print('t0_new', t0_new)
+        idx = np.searchsorted(self.ts, t0_new, 'left') + 1
+        self.ts = self.ts[:idx]
+        self.interpolants = self.interpolants[:idx]
+        # print('self.ts[idx]', self.ts[idx])
+        # print('self.ts[idx+1]', self.ts[:idx+1], 'len(self.ts[idx+1])', len(self.ts[:idx+1]))
+        # print('len(self.interpolants[idx])', len(self.interpolants[:idx])) 

@@ -1,5 +1,6 @@
 import inspect
 import numpy as np
+import sys
 #from .bdf import BDF
 #from .radau import Radau
 from .rk import RK23, RK45
@@ -393,23 +394,47 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', t_eval=None,
     elif t_eval is None and solver.h_info == 'from previous simu':
         (ts, ys, yps) = solver.solver_old.datas
         interpolants = solver.h.interpolants
+
+        # particular case of a discontinuity at initial order 0
+        if(solver.init_discont):
+            # case of the restart before the last time with discontinuity
+            if(solver.before):
+                # looking for good ts until solver.t
+                idx = np.searchsorted(ts,solver.t) + 1
+                ts = ts[:idx] + [solver.t]
+                ys = ys[:idx] + [solver.y]
+                yps = yps[:idx] + [solver.f]
+                interpolants = interpolants[:idx]
+            else: # case for normal restart with discontinuity of order 0 
+                # looking for good ts until solver.t
+                ts = ts + [solver.t]
+                ys = ys + [solver.y]
+                yps = yps + [solver.f]
+        # no discontinuity of order 0, but restart before tf of last simulation
+        else:
+            if(solver.before):
+                # looking for right ts before solver.t
+                idx = np.searchsorted(ts,solver.t)
+                ts = ts[:idx] + [solver.t]
+                ys = ys[:idx] + [solver.y]
+                yps = yps[:idx] + [solver.f]
+                interpolants = interpolants[:idx]
     else:
         ts = []
         ys = []
         yps = []
         interpolants = []
 
-
     events, is_terminal, event_dir = prepare_events(events)
 
     if events is not None:
-        # if args is not None:
-            # # Wrap user functions in lambdas to hide the additional parameters.
-            # # The original event function is passed as a keyword argument to the
-            # # lambda to keep the original function in scope (i.e., avoid the
-            # # late binding closure "gotcha").
-            # events = [lambda t, x, event=event: event(t, x, *args)
-                      # for event in events]
+        if args is not None:
+            # Wrap user functions in lambdas to hide the additional parameters.
+            # The original event function is passed as a keyword argument to the
+            # lambda to keep the original function in scope (i.e., avoid the
+            # late binding closure "gotcha").
+            events = [lambda t, x, event=event: event(t, x, *args)
+                      for event in events]
         g = [event(t0, y0, solver.Z0) for event in events]
         if(solver.h_info != 'from previous simu'):
             t_events = [[] for _ in range(len(events))]
@@ -436,18 +461,19 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', t_eval=None,
 
         t_old = solver.t_old
         t = solver.t
+        # print('accepted step', t)
         y = solver.y
         yp = solver.f
         sol = solver.dense_output()
         interpolants.append(sol)
 
         if events is not None:
-            Z = solver.delaysEval(t)
+            Z = solver.eval_y_past(t)
             g_new = [event(t, y, Z) for event in events]
             active_events = find_active_events(g, g_new, event_dir)
             notStopAtBeg = t_old > t0 # to not stop at the beginning of integration
             if active_events.size > 0 and notStopAtBeg:
-                sol_delay = solver.delaysEval
+                sol_delay = solver.eval_y_past
                 root_indices, roots, terminate = handle_events(sol, sol_delay,
                                                                events,
                                                                active_events,
@@ -461,7 +487,7 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', t_eval=None,
                     status = 1
                     t = roots[-1]
                     y = sol(t)
-                    Z = solver.delaysEval(t)
+                    Z = solver.eval_y_past(t)
                     yp = solver.fun(t,y,Z)
             g = g_new
 
@@ -490,7 +516,7 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', t_eval=None,
         # construction of object ContinuousExt which is the denseoutput of
         # RK integration
         t_ar = np.asarray(ts)
-        CE = ContinuousExt(t_ar, interpolants)
+        CE = ContinuousExt(ts, interpolants, ys)
         solver.CE = CE
         if t_eval is not None and dense_output:
             ti.append(t)
@@ -508,9 +534,9 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', t_eval=None,
         y_arr = np.hstack(ys)
         yp_arr = np.hstack(yps)
     if t_eval is None:
-        sol = ContinuousExt(t_arr, interpolants)
+        sol = ContinuousExt(ts, interpolants, ys) # t_arr
     else:
-        sol = ContinuousExt(ti, interpolants)
+        sol = ContinuousExt(ti, interpolants, ys)
     # do not return history values to the user 
     t_arr = t_arr[1:]
     y_arr = y_arr[:,1:]
