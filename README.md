@@ -169,16 +169,15 @@ plt.legend()
 ```
 Kind of Event:               solve_dde        dde23       reference    DDE_SOLVER
 A wheel hit the ground.  4.516781485071807  4.5167708185  4.516757065  4.516757086163082
+
 relative error to ref    5.41e-06             3.04e-06     0.00e+00       4.69e-09
-*********
-Note: discontinuity of order 0 at initial time
-*********
+
 A wheel hit the ground.  9.751112512473107  9.7511043904  9.751053145  9.751084772797627
+
 relative error to ref    6.09e-06              5.26e-06     0.00e+00      3.24e-06
-*********
-Note: discontinuity of order 0 at initial time
-*********
+
 The suitcase fell over.  11.67038054236842  11.670383672  11.670393497  11.67038588352464
+
 relative error to ref    1.11e-06             8.42e-07        0.00e+00      6.52e-07
 
 
