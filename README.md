@@ -5,7 +5,7 @@ DDE Solver : ***solve_dde***
 A development of delay differential equations solver in SciPy 
 from a fork of version '1.5.0.dev0+912c54c' within the branch *ddeSolver*.
 
-The solver *solve_dde* is derived from *solve_ivp* function from scipy/integrate._ivp. 
+The structure of the solver *solve_dde* is derived from that of *solve_ivp* from scipy/integrate._ivp. 
 You will find the folder scipy/integrate/_dde where all the changes have been made. 
 The function in named ***solve_dde*** in *scipy/integrate/_dde/dde.py*
 
@@ -14,11 +14,15 @@ The function in named ***solve_dde*** in *scipy/integrate/_dde/dde.py*
 Evaluation of delay terms is realized with continuous extension (or denseOutput) of RK integrator.
 Discontinuity tracking is made with location of discontinuity at initialization
 of the solver (as solver_dde handles only constant lags) and modification of the time step 
-when integration is close to a discontinuity.
-Location of events is available.
+when integration is close to a discontinuity. Only discontinuities of orders lower than the 
+order of the error of the integration scheme (4) are taken into account. 
+If a discontinuity of order 0 is detected by the solver at the init, then we add
+ an order for the discontinuities (5), as in the suitecase example.
+Location of events is available as in solve_ivp. And restart from previous 
+computation feature is also available.
 
 ## Requirement 
-All requirement for this development are listed in
+See 
 ```console
 requirements.txt
 ```
@@ -29,7 +33,7 @@ The sources used in this work are:
 3. Oberlet 1981 Numerical Treatment of Delay Differential Equations by Hermite Interpolation
 4. L.F. Shampine, S. Thompson, Chapter, 2009, Numerical Solution of Delay Differential Equations
 
-Sources relevant to DDE:
+Sources relevant to DDEs:
 1. Bellen 2002 Numerical methods for delay differential equations
 2. S. Thompson, L.F. Shampine, 2004, A Friendly Fortran DDE Solver
 
@@ -163,15 +167,23 @@ plt.plot(y, yp, label='phase diagram')
 plt.legend()
 
 ```
-
-Kind of Event:               scipy-dev         dde23       reference
-
-A wheel hit the ground.  4.516774682927172  4.5167708185  4.516757065\
-A wheel hit the ground.  9.751129253909937  9.7511043904  9.751053145\
-The suitcase fell over.  11.670391711563916  11.670383672  11.670393497\
+Kind of Event:               solve_dde        dde23       reference    DDE_SOLVER
+A wheel hit the ground.  4.516781485071807  4.5167708185  4.516757065  4.516757086163082
+relative error to ref    5.41e-06             3.04e-06     0.00e+00       4.69e-09
+*********
+Note: discontinuity of order 0 at initial time
+*********
+A wheel hit the ground.  9.751112512473107  9.7511043904  9.751053145  9.751084772797627
+relative error to ref    6.09e-06              5.26e-06     0.00e+00      3.24e-06
+*********
+Note: discontinuity of order 0 at initial time
+*********
+The suitcase fell over.  11.67038054236842  11.670383672  11.670393497  11.67038588352464
+relative error to ref    1.11e-06             8.42e-07        0.00e+00      6.52e-07
 
 
 ![](DDEs_models_test/figures/suitecase/phase_diag.png)
+![](DDEs_models_test/figures/suitecase/t_y_yp.png)
 
 ### Kermack-McKendrick an infectious disease model
 

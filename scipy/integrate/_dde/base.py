@@ -94,8 +94,8 @@ class DdeSolver(object):
     """
     TOO_SMALL_STEP = "Required step size is less than spacing between numbers."
 
-    def __init__(self, fun, t0, y0, t_bound, h,
-                 delays):
+    def __init__(self, fun, t0, y0, t_bound, h, delays):
+
         self._fun, self.y0, self.h, self.h_info = check_arguments(fun,y0,h)
         self.y = self.y0.copy()
         self.t_old = None
@@ -132,6 +132,9 @@ class DdeSolver(object):
             self.nfailed = self.h.nfailed
             self.nOverlap = self.h.nOverlap
 
+            self.discont = self.h.discont
+            self.nxtDisc = len(self.discont)
+
             self.before = False # default value
             if(self.h.t[0] <= self.t and self.t < self.h.t[-1]):
                 self.before = True
@@ -167,9 +170,9 @@ class DdeSolver(object):
             print('Note: discontinuity of order 0 at initial time')
             print('*********')
             self.order_track = self.order + 1
-
+        # detection of discontinuities which can degradate 
+        # the accurency of integration
         self.discontDetection()
-        # print('self.discont', self.discont)
         
         self.f = self.fun(self.t, self.y, self.Z0) # initial value of f(t0,y0,Z0)
 
@@ -193,10 +196,10 @@ class DdeSolver(object):
         .. [1] S. Shampine, Thompson, "?????" dde23 MATLAB
         """
     
-        self.discont = []
+        discont = []
         #  discontinuites detection
         if not self.delays:
-            self.discont = self.t_bound
+            discont = [self.t_bound]
             self.delayMin = np.inf
         else:
     
@@ -205,7 +208,7 @@ class DdeSolver(object):
             tmp = self.t + d
             # print('order+1', self.order_track+1)
             for i in range(1,self.order_track+1):
-                self.discont.append(tmp.tolist())
+                discont.append(tmp.tolist())
                 # print('tmp', tmp)
                 z = 1 # number of time for delays
                 # print('i+1',i+1, 'self.order_track+1', self.order_track+1)
@@ -219,19 +222,22 @@ class DdeSolver(object):
                         # print('z', z)
                         inter_d = tmp[k:] + d[:-k] * z
                         # print('inter_d', inter_d)
-                        self.discont.append(inter_d.tolist())
+                        discont.append(inter_d.tolist())
                     z += 1
                 tmp += d
             # flatened the list of list of discont and discont as array
-            self.discont = np.asarray(
-                                     sorted([val for sub_d in self.discont
-                                                 for val in sub_d])
-                                     )
-            self.discont = np.delete(self.discont,
-                                     np.argwhere(
-                                                 np.ediff1d(self.discont) < EPS
-                                                 ) + 1)
-            self.nxtDisc = 0  # indice diiie la prochain discontinuite
+            discont = np.asarray(sorted([val for sub_d in discont
+                                             for val in sub_d]))
+            discont = np.delete(discont, np.argwhere(
+                                                     np.ediff1d(discont) < EPS
+                                                    ) + 1).tolist()
+        if(self.h_info != 'from previous simu'):
+            self.discont = discont
+            self.nxtDisc = 0  # index to next discont
+        else:
+            self.discont += discont
+
+
 
     def init_history_function(self):
         """

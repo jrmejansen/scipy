@@ -38,10 +38,9 @@ hitGround.direction = 0 # % All events have to be reported
 hitGround.terminal = True                                 
 
 events = [finalEvent, hitGround]
-print('y0', y0)
 sol23 = solve_dde(fun, tspan, delays, y0, y0, method='RK23',
                   atol=atol, rtol=rtol ,events=events)
-print("\nKind of Event:               scipy-dev         dde23       reference    DDE_SOLVER")
+print("\nKind of Event:               solve_dde         dde23       reference    DDE_SOLVER")
 # ref values of matlab dde23 example script 
 ref = np.array([4.516757065, 9.751053145, 11.670393497])
 # computed values from matlab dde23 with same atol & rtol
@@ -79,11 +78,12 @@ yp_mat = mat['y'][1,:]
 
 
 plt.figure(figsize=(18,14))
-plt.plot(t, y,'o', label='scipy-dev y(0)(t)')
-plt.plot(t, yp,'o', label='scipy-dev y(1)(t)')
-plt.plot(t_mat, y_mat,'-', label='scipy-dev y(0)(t)')
-plt.plot(t_mat, yp_mat,'-', label='dde23 yp(t)')
+plt.plot(t, y,'o', label=r'solve_dde $\theta(t)$')
+plt.plot(t, yp,'o', label=r'solve_dde $\dot{\theta}(t)$')
+plt.plot(t_mat, y_mat,'-', label=r'dde23 $\theta(t)$')
+plt.plot(t_mat, yp_mat,'-', label=r'dde23 $\dot{\theta}(t)$')
 plt.legend()
+plt.savefig('figures/suitecase/t_y_yp')
 
 plt.figure(figsize=(14,12))
 plt.plot(y, yp, 'o-', label='solve_dde')
