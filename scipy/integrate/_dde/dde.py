@@ -387,10 +387,18 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', t_eval=None,
     solver = method(fun, t0, y0, h, tf, delays, **options)
 
     if t_eval is None and solver.h_info != 'from previous simu':
-        ts = [solver.t_oldest, solver.t]
-        ys = [solver.y_oldest, solver.y]
-        yps = [solver.yp_oldest, solver.f]
-        interpolants = [solver.h]
+        if solver.init_discont:
+            # initial discont when we repeate init time to having the right 
+            # interpolant function when contructing ContinuousExtension
+            ts = [solver.t_oldest, solver.t] + [solver.t]
+            ys = [solver.y_oldest, solver.y] + [solver.y]
+            yps = [solver.yp_oldest, solver.f] + [solver.f]
+            interpolants = [solver.h]
+        else:
+            ts = [solver.t_oldest, solver.t]
+            ys = [solver.y_oldest, solver.y]
+            yps = [solver.yp_oldest, solver.f]
+            interpolants = [solver.h]
     elif t_eval is None and solver.h_info == 'from previous simu':
         (ts, ys, yps) = solver.solver_old.datas
         interpolants = solver.h.interpolants
@@ -534,13 +542,18 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', t_eval=None,
         y_arr = np.hstack(ys)
         yp_arr = np.hstack(yps)
     if t_eval is None:
-        sol = ContinuousExt(ts, interpolants, ys) # t_arr
+        sol = ContinuousExt(ts, interpolants, ys)
     else:
         sol = ContinuousExt(ti, interpolants, ys)
     # do not return history values to the user 
-    t_arr = t_arr[1:]
-    y_arr = y_arr[:,1:]
-    yp_arr = yp_arr[:,1:]
+    if solver.init_discont: # if init_discont have to remove repetead vals
+        t_arr = t_arr[2:]
+        y_arr = y_arr[:,2:]
+        yp_arr = yp_arr[:,2:]
+    else:
+        t_arr = t_arr[1:]
+        y_arr = y_arr[:,1:]
+        yp_arr = yp_arr[:,1:]
     # datas useful for restart integration from values instead of
     # sol cotinous extension
     datas = (ts, ys, yps)

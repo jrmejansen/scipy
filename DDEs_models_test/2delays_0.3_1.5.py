@@ -29,7 +29,7 @@ yp = sol.yp[0,:]
 
 # sol matlab
 import scipy.io as spio
-path_matlab = 'data_dde23/2delays_dde23.mat'
+path_matlab = 'data_dde23/2delays_1_3_3_2_dde23.mat'
 mat = spio.loadmat(path_matlab, squeeze_me=True)
 
 t_mat = mat['t']
@@ -51,7 +51,7 @@ plt.plot(t_mat, y_mat, 'o', label='dde23')
 plt.xlabel(r'$t$')
 plt.xlabel(r'$y(t)$')
 plt.legend()
-plt.savefig('figures/2delays/y')
+plt.savefig('figures/2delays_0.3_1.5/y')
 
 plt.figure()
 plt.plot(t_mat[mask], err_dev_mat, label='solve_dde/dde23')
@@ -59,7 +59,7 @@ plt.legend()
 plt.xlabel(r'$t$')
 plt.ylabel(r'$\varepsilon$')
 plt.title('relative errors')
-plt.savefig('figures/2delays/error')
+plt.savefig('figures/2delays_0.3_1.5/error')
 
 # plt.figure()
 # plt.plot(y, yp, label='scipy-dev')
@@ -67,13 +67,14 @@ plt.savefig('figures/2delays/error')
 # plt.xlabel('y')
 # plt.ylabel('dydt')
 # plt.title('phase graph')
-
+dt = np.diff(t)
 plt.figure()
-plt.plot(t[:-1],np.diff(t),'-o',label='solve__dde')
+plt.plot(t[:-1],dt,'-o',label='solve__dde')
+plt.vlines(sol.discont, np.min(dt), np.max(dt), label='discont')
 plt.plot(t_mat[:-1],np.diff(t_mat),'-o',label='dde23')
 plt.legend()
 plt.ylabel(r'$\Delta t$')
 plt.xlabel(r'$t$')
-plt.savefig('figures/2delays/dt')
+plt.savefig('figures/2delays_0.3_1.5/dt')
 plt.show()
 

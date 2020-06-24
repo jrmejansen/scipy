@@ -127,9 +127,13 @@ class ContinuousExt(object):
     local interpolants. It provides an algorithm to select a right interpolant
     for each given point.
 
-*********************   The interpolants cover the range between `t_min` and `t_max` (see
-    Attributes below). Evaluation outside this interval have to be forbidden, but
-    not yet implemented ***********************************************************
+    The interpolants cover the range between `t_min` and `t_max` (see
+    Attributes below). 
+    
+    ***************
+    Evaluation outside this interval have to be forbidden, but
+    not yet implemented
+    *********
 
     When evaluating at a breakpoint (one of the values in `ts`) a segment with
     the lower index is selected.
@@ -140,38 +144,41 @@ class ContinuousExt(object):
         Time instants between which local interpolants are defined. Must
         be strictly increasing or decreasing (zero segment with two points is
         also allowed).
-    interpolants : list of DenseOutput with n_segments elements
+    interpolants : list of history and DenseOutput with respectively 1 and 
+        n_segments-1 elements
         Local interpolants. An i-th interpolant is assumed to be defined
         between ``ts[i]`` and ``ts[i + 1]``.
-
+    ys : array_like, shape (n_segments + 1,)
+        variables values associated to ts
     Attributes
     ----------
     t_min, t_max : float
         Time range of the interpolation.
     """
     def __init__(self, ts, interpolants, ys):
-        self.discont = False
+        self.repeated_t = False
         if np.any(np.ediff1d(ts) < EPS):
-            # where is at least 2 identic time in ts
-            self.discont = True
+            # where is at least 2 repeated time in ts
+            self.repeated_t = True
             # locate duplicate values  
             # print('type(ts)', type(ts))
-            pos = (np.argwhere(np.ediff1d(ts) < EPS) + 1) # idx of discont val
-            # print('pos', pos)
-            pos = pos[:,0].tolist()
+            self.idxs = np.argwhere(np.diff(ts) < EPS) + 1
+            # print('idxs', self.idxs)
+            idxs = self.idxs[:,0].tolist()
             # print('pos', pos, 'type pos', type(pos))
             # save discont values
-            self.t_discont = [ts[i] for i in pos]
-            self.y_discont = [ys[i] for i in pos]
+            self.t_discont = [ts[i] for i in idxs]
+            self.y_discont = [ys[i] for i in idxs]
             # print('self.t_discont', self.t_discont,'self.y_discont', self.y_discont)
             # del discont values
             # print('len(ts)', len(ts), 'len(ys)',len(ys))
             # for k in range(len(pos)):
                 # print('self.t_discont k', self.t_discont[k])
-            ts = [i for j, i in enumerate(ts) if j not in pos]
-            ys =[i for j, i in enumerate(ys) if j not in pos]
+            ts = [i for j, i in enumerate(ts) if j not in idxs]
+            ys =[i for j, i in enumerate(ys) if j not in idxs]
             # print('len(ts)', len(ts), 'len(ys)',len(ys))
         ts = np.asarray(ts)
+        self.ys = ys
         d = np.diff(ts)
         # print('ts',ts, '\nd', d)
         # The first case covers integration on zero segment.
@@ -183,9 +190,13 @@ class ContinuousExt(object):
             raise ValueError("`ts` must be strictly increasing or decreasing.")
 
         self.n_segments = len(interpolants)
-        if ts.shape != (self.n_segments + 1,):
+        if ts.shape != (self.n_segments + 1,) or len(ts) != len(ys):
             raise ValueError("Numbers of time stamps and interpolants "
                              "don't match.")
+        if len(ts) != len(ys):
+            raise ValueError("number of ys and ts "
+                             "don't match.")
+
         self.ts = ts
         self.interpolants = interpolants
         if ts[-1] >= ts[0]:
@@ -204,8 +215,8 @@ class ContinuousExt(object):
         # then we prioritize a segment with a lower index.
 
         # if discont case + t is a discont 
-        if self.discont and np.any(np.abs(self.t_discont - t) < EPS):
-            print('return particular value')
+        if self.repeated_t and np.any(np.abs(self.t_discont - t) < EPS):
+            print('return the discont value at t=%s' % t)
             if self.ascending:
                 ind = np.searchsorted(self.t_discont, t, side='left')
             else:
@@ -261,14 +272,31 @@ class ContinuousExt(object):
         if t.ndim == 0:
             return self._call_single(t)
 
-        order = np.argsort(t)
-        reverse = np.empty_like(order)
-        reverse[order] = np.arange(order.shape[0])
-        t_sorted = t[order]
+        # order = np.argsort(t)
+        # reverse = np.empty_like(order)
+        # reverse[order] = np.arange(order.shape[0])
+        # t_sorted = t[order]
 
-        if(self.discont and np.any(np.argwhere(np.diff(t_sorted) < EPS))):
-            idxs = np.argwhere(np.diff(t_sorted) < EPS) + 1
-            t = np.delete(t_sorted, idxs)
+        # check if repeated time at construction and if t given by user have
+        # repeated values too
+        if self.repeated_t:
+            if not np.any(np.diff(t) < EPS):
+                raise ValueError("as discontinuities within tspan "
+                                 "the user have to provide t with disconts")
+            # if it is the case .... we remove repeated time to add them at 
+            # the end of interp process
+            idxs = np.argwhere(np.diff(t) < EPS) + 1
+            t = np.delete(t, idxs)
+            order = np.argsort(t)
+            reverse = np.empty_like(order)
+            reverse[order] = np.arange(order.shape[0])
+            t_sorted = t[order]
+        else:
+            order = np.argsort(t)
+            reverse = np.empty_like(order)
+            reverse[order] = np.arange(order.shape[0])
+            t_sorted = t[order]
+
 
         # See comment in self._call_single.
         if self.ascending:
@@ -289,12 +317,11 @@ class ContinuousExt(object):
             if(segment==0):
                 Nt = len(t_sorted[group_start:group_end])
                 interp = self.interpolants[segment]
-                n = len(interp)
+                n = len(self.ys[0])
                 y = np.zeros((n,Nt))
                 for k in range(Nt):
                     if(type(interp) is list):
                         # this is list on cubicHermiteSpline
-                        n = len(interp)
                         va = np.zeros(n)
                         for m in range(n):
                             va[m] = interp[m](t[k])
@@ -313,11 +340,16 @@ class ContinuousExt(object):
         ys = np.hstack(ys)
         ys = ys[:, reverse]
 
-        if(self.discont and np.any(np.argwhere(np.diff(t) < EPS))):
+        # if(self.repeated_t and np.any(np.argwhere(np.diff(t) < EPS))):
+        if self.repeated_t:
+            print('*********')
+            print('Note: discont managment \n provide time intervals \
+                   with duplicate times at discontinuities')
+            print('*********')
             # adding the discont value at t_discont
             # print('t_sorted', t_sorted)
             t_tmp = t_sorted.copy()
-            for k in range(len(idxs)):
+            for k in range(len(self.idxs)):
                 idx = np.searchsorted(t_tmp, self.t_discont[k]) + 1
                 t_tmp = np.insert(t_tmp, idx, self.t_discont[k])
                 ys = np.insert(ys, idx, self.y_discont[k], axis=1)
