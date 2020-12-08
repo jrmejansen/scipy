@@ -113,10 +113,10 @@ y(t<t0)=h \
 
 script is in DDEs_models_test/2delays_discont.py
 
-![](DDEs_models_test/figures/2delaysdiscont/error.png)
-![](DDEs_models_test/figures/2delaysdiscont/y.png)
-![](DDEs_models_test/figures/2delaysdiscont/phase.png)
-![](DDEs_models_test/figures/2delaysdiscont/dt.png)
+![](DDEs_models_test/figures/2delays_discont/error.png)
+![](DDEs_models_test/figures/2delays_discont/y.png)
+![](DDEs_models_test/figures/2delays_discont/phase.png)
+![](DDEs_models_test/figures/2delays_discont/dt.png)
 
 
 ### rocking suitcase model
