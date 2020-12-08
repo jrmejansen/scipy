@@ -2,7 +2,7 @@ DDE Solver : ***solve_dde***
 =====
 
 
-A development of delay differential equations solver in SciPy 
+A development of constant delay differential equations solver in SciPy 
 from a fork of version '1.5.0.dev0+912c54c' within the branch *ddeSolver*.
 
 The structure of the solver *solve_dde* is derived from that of *solve_ivp* from scipy/integrate._ivp. 
@@ -10,16 +10,16 @@ You will find the folder scipy/integrate/_dde where all the changes have been ma
 The function in named ***solve_dde*** in *scipy/integrate/_dde/dde.py*
 
 ## Numerical methods
-*solve_dde* use the method of step with embedded Runge-Kutta RK23 or RK45 integration.
+*solve_dde* use the method of steps with embedded Runge-Kutta RK23 or RK45 integration.
 Evaluation of delay terms is realized with continuous extension (or denseOutput) of RK integrator.
-Discontinuity tracking is made with location of discontinuity at initialization
-of the solver (as solver_dde handles only constant lags) and modification of the time step 
-when integration is close to a discontinuity. Only discontinuities of orders lower than the 
-order of the error of the integration scheme (4) are taken into account. 
-If a discontinuity of order 0 is detected by the solver at the init, then we add
- an order for the discontinuities (5), as in the suitecase example.
+Discontinuities tracking is made with location of discontinuities at initialization
+of the solver (as solver_dde handles only constant lags) and secondary stepsize controls
+are added by modification of the time step when integration is close to a discontinuity.
+Only discontinuities of orders lower than the integration scheme order (4) are taken into account. 
+If a discontinuity of order 0 is detected by the solver at the initialization, then we add
+ one more tracking stage (5), as in the suitecase example.
 Location of events is available as in solve_ivp. And restart from previous 
-computation feature is also available.
+computation feature has been implemented.
 
 ## Requirement 
 See 
@@ -47,9 +47,9 @@ https://www.radford.edu/~thompson/webddes/ddeevtwhite.html
 All presented benchmarks are in the folder *DDEs_models_test/*
 ### converging problem
 
-y'(t) = y(t-1) \
-y(t0)=y_0 \
-y(t<t0) = y_0 \
+$$y'(t) = -y(t-1)$$
+
+$$y(t)=y_0 \quad \text{for} t\leq t_0$$
 
 ```py
 import scipy
