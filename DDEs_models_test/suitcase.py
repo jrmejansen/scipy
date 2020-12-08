@@ -4,6 +4,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import CubicHermiteSpline
 
+"""
+The suitcase problem (Example 8 from Shampine 2000, Solving Delay Differential 
+Equations with dde23)
+
+Tested features:
+    - initial discontinuities
+    - restart integration
+    - events locations
+
+Comparison with dde23 and the fortan routine DDE_SOLVER_M.
+"""
 t0 = 0.0
 tf = 12
 tspan = [t0, tf]
@@ -92,4 +103,12 @@ plt.xlabel(r'$\theta$', fontsize=20)
 plt.ylabel(r'$\dot{\theta}$', fontsize=20)
 plt.legend()
 plt.savefig('figures/suitecase/phase_diag')
+
+plt.figure()
+plt.plot(t[:-1],np.diff(t),'-o',label='dt scipy-dev')
+plt.plot(t_mat[:-1],np.diff(t_mat),'-o',label='dt matlab solver')
+plt.legend()
+plt.ylabel(r'$\Delta t$')
+plt.xlabel(r'$t$')
+plt.savefig('figures/suitecase/dt')
 plt.show()

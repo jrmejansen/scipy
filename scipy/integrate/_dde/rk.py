@@ -4,10 +4,12 @@ from .common import (validate_max_step, validate_tol, select_initial_step,
                      norm, warn_extraneous, validate_first_step)
 
 # Multiply steps computed from asymptotic behaviour of errors by this.
-SAFETY = 0.9 # 0.9 for solve_ivp but if less error are smalles that in dde23
+SAFETY = 0.8
+# 0.9 for solve_ivp but as DDEs are favorable to cyclic solutions whith some
+# possible strong variations in short amount of time, this value is put to 0.8
 
 MIN_FACTOR = 0.2  # Minimum allowed decrease in a step size.
-MAX_FACTOR = 10  # Maximum allowed increase in a step size.
+MAX_FACTOR = 10.  # Maximum allowed increase in a step size.
 
 
 
@@ -23,11 +25,12 @@ class RungeKutta(DdeSolver):
     error_estimator_order = NotImplemented
     n_stages = NotImplemented
 
-    def __init__(self, fun, t0, y0, h, t_bound, delays, max_step=np.inf,
-                 rtol=1e-3, atol=1e-6, vectorized=False,
+    def __init__(self, fun, t0, y0, h, t_bound, delays, jumps,
+                 tracked_stages, max_step=np.inf, rtol=1e-3, atol=1e-6,
                  first_step=None, **extraneous):
         warn_extraneous(extraneous)
-        super(RungeKutta, self).__init__(fun, t0, y0, t_bound, h, delays)
+        super(RungeKutta, self).__init__(fun, t0, y0, t_bound, h, delays,
+                                            jumps, tracked_stages)
         self.y_old = None
         self.yp = None
         self.max_step = validate_max_step(max_step)
@@ -72,21 +75,28 @@ class RungeKutta(DdeSolver):
         while not step_accepted:
             # bool to locate next discont and adapt time step
             isCloseToDiscont = False
+            discontWillCome = False
 
             if h_abs < min_step:
                 return False, self.TOO_SMALL_STEP
 
             h = h_abs * self.direction
             t_new = t + h
-            if self.direction * (t_new - self.t_bound) > 0:
-                t_new = self.t_bound
-            elif(self.nxtDisc < len(self.discont)):
+            # secondary stepsize controls
+            # addition of killing discontinuity feature compared to _ivp code
+            if(self.nxtDisc < len(self.discont)):
+                # we deacrese the max_factor when tracking discontinuities 
+                # as discontinuities .....
                 # length to next discontinuity
                 len2discont = self.discont[self.nxtDisc] - t
                 isCloseToDiscont = 1.1 * h >= len2discont
-                if(isCloseToDiscont):
+                # if close enough modification of the t_new to kill it
+                if isCloseToDiscont:
                     h = len2discont
                     t_new = self.discont[self.nxtDisc]
+
+            if self.direction * (t_new - self.t_bound) > 0:
+                t_new = self.t_bound
 
             h = t_new - t
             h_abs = np.abs(h)
@@ -95,13 +105,11 @@ class RungeKutta(DdeSolver):
             scale = atol + np.maximum(np.abs(y), np.abs(y_new)) * rtol
             error_norm = self._estimate_error_norm(self.K, h, scale)
 
-            if error_norm < 1:
+            if error_norm < 1.0: # accept step
                 if(isCloseToDiscont):
-                    # if we were close to a discont and the adpatation line 92
-                    # is sufficient to have error_norm < 1, then we target the 
-                    # next discont
+                    # update self.nxtDisc and put factor to 1.0
                     self.nxtDisc += 1
-                if error_norm == 0:
+                if np.isclose(error_norm,0.0):
                     factor = MAX_FACTOR
                 else:
                     factor = min(MAX_FACTOR,
@@ -113,7 +121,7 @@ class RungeKutta(DdeSolver):
                 h_abs *= factor
 
                 step_accepted = True
-            else:
+            else: # reject step
                 h_abs *= max(MIN_FACTOR,
                              SAFETY * error_norm ** self.error_exponent)
                 step_rejected = True
@@ -134,10 +142,12 @@ class RungeKutta(DdeSolver):
         return RkDenseOutput(self.t_old, self.t, self.y_old, Q)
 
     def rk_step(self, t, y, f, h):
-        """Perform a single Runge-Kutta step.
+        """Perform a Runge-Kutta step. The rk_step method of _ivp were added 
+        within the RungeKutta class as an instance method because during DDEs
+        integration process, we need to access to the eval_Z method.
 
-        This function computes a prediction of an explicit Runge-Kutta method and
-        also estimates the error of a less accurate method.
+        This function computes a prediction of an explicit Runge-Kutta method 
+        and also estimates the error of a less accurate method.
 
         Notation for Butcher tableau is as in [1]_.
 
@@ -148,7 +158,7 @@ class RungeKutta(DdeSolver):
         y : ndarray, shape (n,)
             Current state.
         f : ndarray, shape (n,)
-            Current value of the derivative, i.e., ``fun(x, y)``.
+            Current value of the derivative, i.e., ``fun(t, y, Z)``.
         h : float
             Step to use.
         Returns
@@ -166,11 +176,13 @@ class RungeKutta(DdeSolver):
         self.K[0] = f
         for s, (a, c) in enumerate(zip(self.A[1:], self.C[1:]), start=1):
             dy = np.dot(self.K[:s].T, a[:s]) * h
-            Z = self.eval_y_past(t + c * h)
+            # eval Z at c * h 
+            Z = self.eval_Z(t + c * h)
             self.K[s] = self.fun(t + c * h, y + dy, Z)
 
         y_new = y + h * np.dot(self.K[:-1].T, self.B)
-        Z = self.eval_y_past(t + h)
+        # last eval of Z for the step
+        Z = self.eval_Z(t + h)
         f_new = self.fun(t + h, y_new, Z)
 
         self.K[-1] = f_new
@@ -178,25 +190,24 @@ class RungeKutta(DdeSolver):
         return y_new, f_new
 
 class RK23(RungeKutta):
-    """Explicit Runge-Kutta method of order 3(2).
-
+    """Explicit Runge-Kutta method of order 3(2) for DDEs resolution as 
+    describe in [2]_. 
+    
     This uses the Bogacki-Shampine pair of formulas [1]_. The error is controlled
     assuming accuracy of the second-order method, but steps are taken using the
     third-order accurate formula (local extrapolation is done). A cubic Hermite
     polynomial is used for the dense output.
-
-    Can be applied in the complex domain.
+    The 3(2) pair has the interesting property that the continuous extension, 
+    used for evaluation of delayed states, and the formula for integration are 
+    both third-order accurate formula.
 
     Parameters
     ----------
     fun : callable
-        Right-hand side of the system. The calling signature is ``fun(t, y)``.
-        Here ``t`` is a scalar and there are two options for ndarray ``y``.
-        It can either have shape (n,), then ``fun`` must return array_like with
-        shape (n,). Or alternatively it can have shape (n, k), then ``fun``
-        must return array_like with shape (n, k), i.e. each column
-        corresponds to a single column in ``y``. The choice between the two
-        options is determined by `vectorized` argument (see below).
+        Right-hand side of the system. The calling signature is ``fun(t, y, Z)``.
+        Here ``t`` is a scalar, ``y`` is the current state and ``Z[:,i]`` the
+        state of ``y`` evaluate at time ``$t-\tau_i$`` for $\tau_i=delays[i]$.
+
     t0 : float
         Initial time.
     y0 : array_like, shape (n,)
@@ -220,8 +231,6 @@ class RK23(RungeKutta):
         beneficial to set different `atol` values for different components by
         passing array_like with shape (n,) for `atol`. Default values are
         1e-3 for `rtol` and 1e-6 for `atol`.
-    vectorized : bool, optional
-        Whether `fun` is implemented in a vectorized fashion. Default is False.
 
     Attributes
     ----------
@@ -231,27 +240,55 @@ class RK23(RungeKutta):
         Current status of the solver: 'running', 'finished' or 'failed'.
     t_bound : float
         Boundary time.
+    h : callable or float or tuple or DdeResult 
+        history function
+    h_info : 
+        type of history given by user
     direction : float
         Integration direction: +1 or -1.
     t : float
         Current time.
     y : ndarray
         Current state.
+    f : ndarray
+        Current right hand side
+    Z0 : ndarray
+        evaluation of Z at initial time.
+    t0 : float
+        Initial time.
+    delays : list
+        list of delays
+    Ndelays : int
+        number of delays
+    delayMax : float
+        maximal delay
+    delayMin : float
+        minimal delay
     t_old : float
         Previous time. None if no steps were made yet.
     step_size : float
         Size of the last successful step. None if no steps were made yet.
+    order_track : int
+        bl
+    init_discont : bool
+        is there or not an initial discontinuity at initial time
+    nxtDisc : int
+        next discontinuity to be kill
+    discont : ndarray (nbr_discontinuities,)
+        times where discontinuities will be killed
     nfev : int
-        Number evaluations of the system's right-hand side.
-    njev : int
-        Number of evaluations of the Jacobian. Is always 0 for this solver as it does not use the Jacobian.
-    nlu : int
-        Number of LU decompositions. Is always 0 for this solver.
+        Number of the system's rhs evaluations.
+    nfailed : int
+        Number of rejected evaluations.
+    nOverlap : int
+        Number of overlapping evaluations of Z
 
     References
     ----------
     .. [1] P. Bogacki, L.F. Shampine, "A 3(2) Pair of Runge-Kutta Formulas",
            Appl. Math. Lett. Vol. 2, No. 4. pp. 321-325, 1989.
+    .. [2] L.F. Shampine and S. Thompson, "Solving DDEs in Matlab", 
+            Applied Numerical Mathematics Vol. 37, No. 4. pp. 441-458, 2001.
     """
     order = 3
     error_estimator_order = 2
@@ -277,19 +314,23 @@ class RK45(RungeKutta):
     assuming accuracy of the fourth-order method accuracy, but steps are taken
     using the fifth-order accurate formula (local extrapolation is done).
     A quartic interpolation polynomial is used for the dense output [2]_.
-
-    Can be applied in the complex domain.
+    
+    The 5(4) pair is to be used with care. Integration is made with a 
+    fifth-order accurate formula although the continous extension,
+    used for evaluation of delayed states, is a fourth-order
+    accuracy. As evaluation of delayed terms Z is at a lower order accuracy
+    than integration we can not guarante the preservatin of the global order 
+    of the DDE method. This can undermine stepsize control strategies.
+    For the RK23 pair, the order of interpolation and integration are the same
+    [3]_.
 
     Parameters
     ----------
     fun : callable
-        Right-hand side of the system. The calling signature is ``fun(t, y)``.
-        Here ``t`` is a scalar, and there are two options for the ndarray ``y``:
-        It can either have shape (n,); then ``fun`` must return array_like with
-        shape (n,). Alternatively it can have shape (n, k); then ``fun``
-        must return an array_like with shape (n, k), i.e., each column
-        corresponds to a single column in ``y``. The choice between the two
-        options is determined by `vectorized` argument (see below).
+        Right-hand side of the system. The calling signature is ``fun(t, y, Z)``.
+        Here ``t`` is a scalar, ``y`` is the current state and ``Z[:,i]`` the
+        state of ``y`` evaluate at time ``$t-\tau_i$`` for $\tau_i=delays[i]$.
+
     t0 : float
         Initial time.
     y0 : array_like, shape (n,)
@@ -305,7 +346,7 @@ class RK45(RungeKutta):
         bounded and determined solely by the solver.
     rtol, atol : float and array_like, optional
         Relative and absolute tolerances. The solver keeps the local error
-        estimates less than ``atol + rtol * abs(y)``. Here `rtol` controls a
+        estimates less than ``atol + rtol * abs(y)``. Here, `rtol` controls a
         relative accuracy (number of correct digits). But if a component of `y`
         is approximately below `atol`, the error only needs to fall within
         the same `atol` threshold, and the number of correct digits is not
@@ -313,8 +354,6 @@ class RK45(RungeKutta):
         beneficial to set different `atol` values for different components by
         passing array_like with shape (n,) for `atol`. Default values are
         1e-3 for `rtol` and 1e-6 for `atol`.
-    vectorized : bool, optional
-        Whether `fun` is implemented in a vectorized fashion. Default is False.
 
     Attributes
     ----------
@@ -324,22 +363,48 @@ class RK45(RungeKutta):
         Current status of the solver: 'running', 'finished' or 'failed'.
     t_bound : float
         Boundary time.
+    h : callable or float or tuple or DdeResult 
+        history function
+    h_info : 
+        type of history given by user
     direction : float
         Integration direction: +1 or -1.
     t : float
         Current time.
     y : ndarray
         Current state.
+    f : ndarray
+        Current right hand side
+    Z0 : ndarray
+        evaluation of Z at initial time.
+    t0 : float
+        Initial time.
+    delays : list
+        list of delays
+    Ndelays : int
+        number of delays
+    delayMax : float
+        maximal delay
+    delayMin : float
+        minimal delay
     t_old : float
         Previous time. None if no steps were made yet.
     step_size : float
         Size of the last successful step. None if no steps were made yet.
+    order_track : int
+        bl
+    init_discont : bool
+        is there or not an initial discontinuity at initial time
+    nxtDisc : int
+        next discontinuity to be kill
+    discont : ndarray (nbr_discontinuities,)
+        times where discontinuities will be killed
     nfev : int
-        Number evaluations of the system's right-hand side.
-    njev : int
-        Number of evaluations of the Jacobian. Is always 0 for this solver as it does not use the Jacobian.
-    nlu : int
-        Number of LU decompositions. Is always 0 for this solver.
+        Number of the system's rhs evaluations.
+    nfailed : int
+        Number of rejected evaluations.
+    nOverlap : int
+        Number of overlapping evaluations of Z
 
     References
     ----------
@@ -348,6 +413,8 @@ class RK45(RungeKutta):
            No. 1, pp. 19-26, 1980.
     .. [2] L. W. Shampine, "Some Practical Runge-Kutta Formulas", Mathematics
            of Computation,, Vol. 46, No. 173, pp. 135-150, 1986.
+    .. [3] L.F. Shampine and S. Thompson, "Solving DDEs in Matlab", 
+            Applied Numerical Mathematics Vol. 37, No. 4. pp. 441-458, 2001.
     """
     order = 5
     error_estimator_order = 4
@@ -377,6 +444,7 @@ class RK45(RungeKutta):
          701980252875 / 199316789632],
         [0, -282668133/205662961, 2019193451/616988883, -1453857185/822651844],
         [0, 40617522/29380423, -110615467/29380423, 69997945/29380423]])
+
 
 
 class RkDenseOutput(DenseOutput):

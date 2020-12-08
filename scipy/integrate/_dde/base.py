@@ -1,13 +1,33 @@
-import sys
+import warnings
+from warnings import warn
+warnings.simplefilter('always', UserWarning)
 import numpy as np
 from inspect import isfunction
 from scipy.interpolate import CubicHermiteSpline
 from .common import EPS
 
 def check_arguments(fun, y0, h):
-    """Helper function for checking arguments for solve_dde.
-    Complex problem avoid. The function define the type of history given by the user 
-    see init_history_function
+    """Helper function for checking arguments for solve_dde. The function
+    return the type of the history given by the user
+
+    Parameters
+    ----------
+    fun : callable
+        Right hand side function of system equations
+    y0 :
+        Initial conditions
+    h :
+        History conditions
+    Return
+    -------
+    fun_wrapped : (callable)
+        Wrapper of the right hand side function of system equations
+    y0 : ndarray, shape (n,)
+        Initial condition
+    h_n : callable or ndarray or tuple of ndarray or DdeResult
+        History condition
+    h_info : str
+        The type of history given by user (tuple, function, DdeResult)
     """
     y0 = np.asarray(y0)
     if np.issubdtype(y0.dtype, np.complexfloating):
@@ -16,6 +36,7 @@ def check_arguments(fun, y0, h):
     else:
         dtype = float
     y0 = y0.astype(dtype, copy=False)
+
     if(type(h) is tuple):
         h_info = 'from tuple'
         h_n = h
@@ -23,29 +44,25 @@ def check_arguments(fun, y0, h):
         h_info = 'from function'
         def h_n(t):
             return np.asarray(h(t),dtype=dtype)
-        test = h_n(0.0)
-        if(test.shape != y0.shape):
+        if(h_n(0.0).shape != y0.shape):
             raise ValueError("size of output of history function 'h'\
                               is not compatible with size of y0")
     elif(h.__class__.__name__ == 'DdeResult'):
-        h_info = 'from previous simu'
+        h_info = 'from DdeResult'
         h_n = h
     else:
         h_info = 'from constant'
-        h_n = np.asarray(h)
-        h_n = h_n.astype(dtype, copy=False)
+        h_n = np.asarray(h).astype(dtype, copy=False)
         if(h_n.shape != y0.shape):
-            raise ValueError("size of output of history function 'h'\
+            raise ValueError("size of the history output function 'h'\
                               is not compatible with size of y0")
     if y0.ndim != 1:
         raise ValueError("`y0` must be 1-dimensional.")
 
     def fun_wrapped(t, y, Z):
         return np.asarray(fun(t, y, Z), dtype=dtype)
-    
+
     return fun_wrapped, y0, h_n, h_info
-
-
 
 class DdeSolver(object):
     """Base class for DDE solvers.
@@ -53,19 +70,29 @@ class DdeSolver(object):
     Parameters
     ----------
     fun : callable
-        Right-hand side of the system. The calling signature is ``fun(t, y, Z)``.
-        Here ``t`` is a scalar, there are two options for ndarray ``y`` and
-        ``h`` the history function.
+        Right-hand side of the system $\dot{y} = f(t,y(t),y(t-\tau_1),...,
+        y(t-\tau_j)))$. The calling signature is ``fun(t, y, Z)``.
+        Here ``t`` is a scalar, ``y`` is the current state and ``Z[:,i]`` the
+        state of ``y`` evaluate at time ``$t-\tau_i$`` for $\tau_i=delays[i]$.
     t0 : float
         Initial time.
+    t0_l : list
+        List of initial times if restarting several time integration.
+    before : bool
+        After restarting integration, initial time is before last time of the
+        previous integration.
     y0 : array_like, shape (n,)
         Initial state.
-    h :
+    h : callable or float or tuple or DdeResult
+        Historical state of the differential system
     t_bound : float
         Boundary time --- the integration won't continue beyond it. It also
         determines the direction of the integration.
-    delays :
-
+    delays : list
+        List of constant and positive delays of the system
+    jumps : list
+        Times where discontinuities have to be killed in history, before
+        initial time, or during the integration.
     Attributes
     ----------
     n : int
@@ -74,37 +101,104 @@ class DdeSolver(object):
         Current status of the solver: 'running', 'finished' or 'failed'.
     t_bound : float
         Boundary time.
-    h : history function
+    h : callable or float or tuple or DdeResult
+        history function
+    h_info :
+        type of history given by user
     direction : float
         Integration direction: +1 or -1.
     t : float
         Current time.
     y : ndarray
         Current state.
+    f : ndarray
+        Current right hand side
+    Z0 : ndarray
+        evaluation of Z at initial time.
+    t0 : float
+        Initial time.
+    delays : list
+        list of delays
+    Ndelays : int
+        number of delays
+    delayMax : float
+        maximal delay
+    delayMin : float
+        minimal delay
     t_old : float
         Previous time. None if no steps were made yet.
     step_size : float
         Size of the last successful step. None if no steps were made yet.
+    tracked_stages : int
+        Track discontinuities up to the order of the solver. Default value is 
+        then tracked_stages equal to the solver's order.
+    init_discont : bool
+        is there or not an initial discontinuity at initial time
+    nxtDisc : int
+        next discontinuity to be kill
+    discont : ndarray (nbr_discontinuities,)
+        times where discontinuities will be killed
     nfev : int
         Number of the system's rhs evaluations.
-    njev : int
-        Number of the Jacobian evaluations.
-    nlu : int
-        Number of LU decompositions.
+    nfailed : int
+        Number of rejected evaluations.
+    nOverlap : int
+        Number of overlapping evaluations of Z
     """
     TOO_SMALL_STEP = "Required step size is less than spacing between numbers."
 
-    def __init__(self, fun, t0, y0, t_bound, h, delays):
+    def __init__(self, fun, t0, y0, t_bound, h, delays, jumps, tracked_stages):
 
         self._fun, self.y0, self.h, self.h_info = check_arguments(fun,y0,h)
+
         self.y = self.y0.copy()
         self.t_old = None
         self.t0 = t0
         self.t = t0
         self.t_bound = t_bound
         self.n = self.y.size
+
+        if(self.h_info != 'from DdeResult'):
+            # if first computation
+            # -> initialisation of stats params
+            self.nfev = 0
+            self.nfailed = 0
+            self.nOverlap = 0
+            # list of t0 init
+            self.t0_l = [t0]
+        else:
+            # self.method != self.h.
+            # restart from previous integrations
+            # -> recovering previous stats params
+            self.nfev = self.h.nfev
+            self.nfailed = self.h.nfailed
+            self.nOverlap = self.h.nOverlap
+
+            # self.
+            self.discont = self.h.discont
+            self.nxtDisc = self.h.nxtDisc
+            if self.nxtDisc < len(self.discont):
+                warn("Restart integration and still need to kill some disconts")
+            # adding the new t0 to list
+            self.t0_l = self.h.t0_l
+            self.t0_l.append(t0)
+
+            self.before = False # default value
+            if(self.h.t[0] <= self.t and self.t < self.h.t[-1]):
+                self.before = True
+                warn("Start from previous integration, t0 given in tspan is %s <= %s < %s \n start from previous integration" % (self.h.t[0], self.t, self.h.t[-1]))
+            elif(self.h.t[0] > self.t or self.t > self.h.t[-1]):
+                print('self.h.t[0]', self.h.t[0])
+                print('self.t', self.t)
+                print('self.h.t[-1]', self.h.t[-1])
+                raise ValueError("t0 (given in tspan) > self.h.t[-1] or t0 < self.h.t[0]")
+
         if not delays:
-            self.delayMin = np.inf
+            warn("no delays given by user, solver will work as solve_ivp")
+            self.delayMin = self.delayMax = np.inf
+            self.Ndelays = 0
+            self.delays = []
+
         else:
             self.delays = sorted(delays)
             self.Ndelays = len(delays)
@@ -117,32 +211,6 @@ class DdeSolver(object):
         self.direction = np.sign(t_bound - t0) if t_bound != t0 else 1
         self.status = 'running'
 
-        if(self.h_info != 'from previous simu'):
-            # if first computation init of stat params
-            self.nfev = 0
-            self.njev = 0
-            self.nlu = 0
-            self.nfailed = 0
-            self.nOverlap = 0
-        else:
-            # restart from previous computation -> recovering previous stats
-            self.nfev = self.h.nfev
-            self.njev = self.h.njev
-            self.nlu = self.h.nlu
-            self.nfailed = self.h.nfailed
-            self.nOverlap = self.h.nOverlap
-
-            self.discont = self.h.discont
-            self.nxtDisc = len(self.discont)
-
-            self.before = False # default value
-            if(self.h.t[0] <= self.t and self.t < self.h.t[-1]):
-                self.before = True
-                print('t0 given in tspan is %s <= %s < %s \n \
-                        restart from previous computation \
-                        ' % (self.h.t[0], self.t, self.h.t[-1]))
-            elif(self.h.t[0] > self.t or self.t > self.h.t[-1]):
-                raise ValueError("error tspan t0 > or < self.h.t[0]")
 
         # init of the history function
         self.init_history_function()
@@ -155,96 +223,151 @@ class DdeSolver(object):
         self.fun = fun
         self.fun_single = fun_single
         # init y(t-tau_i) at t0
-        self.Z0 = self.eval_y_past(self.t)
+        self.Z0 = self.eval_Z(self.t)
         # evaluate y0 from history function
-        self.y0_h = self.eval_y0_from_h(self.t)
-        # check if there is a discontinuity of order 0, i.e. if 
-        # self.y0_h != self.y
-        if(np.max(np.abs(self.y0_h - self.y)) < EPS):
-            self.order_track = self.order
-            # print('continuous at t=t0')
+        y0_h = self.eval_y0_from_h(self.t)
+        # check if there is a discontinuity of order 0, i.e. if
+        # 4 time EPS because EPS is machine precision 2.2e-16 ...
+        if tracked_stages is not None:
+            warn("User choosen to track discontinuities on %s stages" % tracked_stages)
+            self.tracked_stages = tracked_stages
+        else:
+            self.tracked_stages = self.order
+
+        if(np.max(np.abs(y0_h - self.y)) < 100 * EPS):
             self.init_discont = False
         else:
+            warn("Detection of discontinuity of order 0 at initial time."
+                "Tracking discont 1 stage more")
+            self.tracked_stages += 1
             self.init_discont = True
-            print('*********')
-            print('Note: discontinuity of order 0 at initial time')
-            print('*********')
-            self.order_track = self.order + 1
-        # detection of discontinuities which can degradate 
+
+        if jumps:
+            # worth case supposed, if jumps given by user
+            # the algo assume discontinuities of order 0
+            warn("Jumps given by user. Tracking discont 1 stage more")
+            self.tracked_stages += 1
+            if self.t_oldest > min(jumps) or max(jumps) > self.t_bound:
+                raise ValueError("jumps given by users outside considered times"
+                                 "t_oldest=%s, tf=%s and jumps = %s" % (self.t_oldest,
+                                                                        self.t_bound,
+                                                                        jumps))
+
+        # detection of discontinuities which can degradate
         # the accurency of integration
-        self.discontDetection()
-        
+        self.discontDetection(jumps)
         self.f = self.fun(self.t, self.y, self.Z0) # initial value of f(t0,y0,Z0)
 
-    def discontDetection(self):
+    def discontDetection(self, jumps):
         """Discontinuity detection between t0 and tf.
-    
+            seen discontDetection_ for the detection implementation
+
         Parameters
-            t0 (): initial time
-            tf (): final time
-            delays (list): list of delays
         ----------
-        Returns
+        jumps : (list)
+            Time in history or in solution where discontinuities occur.
+        Return
         -------
         nxtDisc : (int)
             index of the nearst discontinuity
         discont : ndarray, shape (nbr_discontinuities,)
-            array with all discont within my interval of integration
-    
-        References
-        ----------
-        .. [1] S. Shampine, Thompson, "?????" dde23 MATLAB
+            array with all disconts within the interval of integration
+
         """
-    
-        discont = []
-        #  discontinuites detection
-        if not self.delays:
-            discont = [self.t_bound]
-            self.delayMin = np.inf
+        discont = self.discontDetection_(jumps)
+        if self.h_info != 'from DdeResult':
+            #  discontinuites detection
+            self.discont = discont
+            # index to the next discont
+            self.nxtDisc = 0
         else:
-    
-            d = np.asarray(self.delays)
-            # print('d', d)
-            tmp = self.t + d
-            # print('order+1', self.order_track+1)
-            for i in range(1,self.order_track+1):
-                discont.append(tmp.tolist())
-                # print('tmp', tmp)
+            discont_sum = sorted(self.discont + discont)
+            # remove duplicated values
+            self.discont = np.delete(np.asarray(discont_sum),
+                                     np.argwhere(
+                                        np.ediff1d(discont_sum) < EPS
+                                                ) + 1).tolist()
+            # update of nxtDisc according to the restart
+            self.nxtDisc = np.searchsorted(self.discont, self.t) + 1
+
+    def discontDetection_(self, jumps):
+        """ Implementation of the detection algorithm
+
+        Parameters
+        ----------
+        jumps : (list)
+            Time in history or in solution where discontinuities occur.
+        Return
+        -------
+        discont : ndarray, shape (nbr_discontinuities,)
+            array with all discont within my interval of integration
+        """
+        if not self.delays:
+            # delays=[], solver used as ivp
+            if jumps:
+                discont = jumps
+            else:
+                discont = []
+            return discont
+        else:
+            discont = []
+            # transport along time of discontinuities
+            transp_discont = np.asarray(self.delays)
+
+            to_transport = [self.t]
+
+            # if jumps and self.h_info == 'from DdeResult':
+            if jumps:
+                # remove jumps outside tspan
+                to_transport += jumps
+            if self.h_info == 'from DdeResult' and not self.init_discont \
+                        and not jumps:
+                warn("Start from previous integration without any jumps or initial discont")
+                # cas where no discont, so on assigne les delays a discont et
+                # on retourn a
+                return []
+            tmp = [(t_ + transp_discont).tolist() for t_ in to_transport]
+            tmp_fla = sorted([val for sub_d in tmp for val in sub_d])
+            for i in range(1,self.tracked_stages+1):
+                discont.append(tmp_fla)
                 z = 1 # number of time for delays
-                # print('i+1',i+1, 'self.order_track+1', self.order_track+1)
-                for j in range(i+1,self.order_track+1): # get intermediere discont
-                    # print('j', j)
-                    # print('len(d)',len(d))
-                    for k in range(1,len(d)):
-                        # print('k',k)
-                        # print('tmp[k:]', tmp[k:])
-                        # print('d[:-k]', d[:-k])
-                        # print('z', z)
-                        inter_d = tmp[k:] + d[:-k] * z
-                        # print('inter_d', inter_d)
-                        discont.append(inter_d.tolist())
+                for j in range(i+1,self.tracked_stages+1): # get intermediere discont
+                    for k in range(1,self.Ndelays):
+                        inter_to_trans = tmp_fla[k:]
+                        inter_d = [(t_ + z * transp_discont[:-k]).tolist() for t_ in inter_to_trans]
+                        inter_d_fla = [val for sub_d in inter_d for val in sub_d]
+                        discont.append(inter_d_fla)
+                        # discont.append(inter_d.tolist())
                     z += 1
-                tmp += d
+                # flatten tmp for add ones more transp_discont
+                tmp = [(t_ + transp_discont * (i+1)).tolist() for t_ in to_transport]
+                tmp_fla = sorted([val for sub_d in tmp for val in sub_d])
             # flatened the list of list of discont and discont as array
             discont = np.asarray(sorted([val for sub_d in discont
                                              for val in sub_d]))
+            # no discontinuities cluster, remove them
             discont = np.delete(discont, np.argwhere(
                                                      np.ediff1d(discont) < EPS
-                                                    ) + 1).tolist()
-        if(self.h_info != 'from previous simu'):
-            self.discont = discont
-            self.nxtDisc = 0  # index to next discont
-        else:
-            self.discont += discont
-
-
+                                                        ) + 1)
+            # remove inital time from discont tracking
+            discont = discont[discont> self.t0].tolist()
+        return discont
 
     def init_history_function(self):
-        """
-        initialisation of past values according to the type of history function given by the user
-        i.e. history as a function / tuple / constant / previous computation
+        """ Initialisation of the historical state according to the type of
+        history given by the user as :
+            1. function for simple evaluation
+            2. tuple of (t_past, y_past, yp_past) for cubic Hermite
+                interpolation with scipy.interpolate.CubicHermiteSpline
+            3. constant
+            4. previous integration
+        Returns
+        -------
+        depend of the h_info attribute
+
         """
         if( self.h_info == 'from tuple'):
+            # unpack of time value, state and state's derivative
             (self.t_past, self.y_past, self.yp_past) = self.h
             self.t_oldest = self.t_past[0]
             if(self.t_oldest < (self.t0 - self.delayMax)):
@@ -252,6 +375,8 @@ class DdeSolver(object):
                             all past values")
             self.y_oldest = self.y_past[:,0]
             self.yp_oldest = self.yp_past[:,0]
+            # construction of the history attribute self.h with
+            # CubicHermiteSpline
             self.h = []
             for k in range(self.n):
                 # extrapolation not possible
@@ -259,37 +384,39 @@ class DdeSolver(object):
                                        self.yp_past[k,:], extrapolate=False)
                 self.h.append(p)
         elif(self.h_info == 'from function'):
-            self.t_oldest = self.t0-self.delayMax
+            self.t_oldest = self.t0 - self.delayMax
             self.t_past = [self.t_oldest, self.t0]
             self.y_oldest = self.h(self.t_oldest)
             self.yp_oldest = np.zeros(self.y_oldest.shape)
         elif(self.h_info == 'from constant'):
-            self.t_oldest = self.t0-self.delayMax
+            self.t_oldest = self.t0 - self.delayMax
             self.y_oldest = self.h
             self.yp_oldest = np.zeros(self.h.shape)
             self.t_past = [self.t_oldest, self.t0]
-        elif(self.h_info == 'from previous simu'):
-            if(self.before):
-                # reorganisation of the interpolation function
-                self.h.sol.reorganize(self.t)
-                self.solver_old = self.h
-                self.h = self.solver_old.sol
-            else:
-                self.solver_old = self.h
-                self.h = self.solver_old.sol
+        elif(self.h_info == 'from DdeResult'):
+            self.t_oldest = self.t0 - self.delayMax
+            self.solver_old = self.h
+            self.h = self.solver_old.sol
         else:
-            print('h_info',self.h_info)
-            raise ValueError("wrong initialisation of the dde history")
+            raise ValueError("wrong initialisation of the dde history, h_info = %s" % self.h_info)
 
 
-    def eval_y_past(self, t_eval):
-        """ Z[:,i] is the evaluation of the solution a past time:  
-            Z[:,i] = y(t-delays[i]).
-            from the value of t-delays[i], Z[:,i] can by evaluate by several ways
+    def eval_Z(self, t_eval):
+        """Evaluation of Z, where Z[:,i] is $y(t-\tau_i)$ with
+        $\tau_i=delays[i]$. From the value of t-delays[i], Z can by evaluate
+        by several ways.
+
+        Parameters
+        ----------
+        t_eval : float
+            Current time.
+        Returns
+        -------
+        Z : ndarray, shape (n,Ndelays)
+            Computed values of $y(t_tau_i), \forall i$.
         """
         if not self.delays:
-            Z = None
-            return Z
+            return None
 
         Z = np.zeros((self.n,self.Ndelays))
         t_past = t_eval - np.asarray(self.delays)
@@ -305,8 +432,8 @@ class DdeSolver(object):
                     for i in range(self.n):
                         Z_k[i] = self.h[i](t_past_k)
                         if(np.isnan(Z_k[i])):
-                            raise ValueError("NaN value found in eval_y_past")
-                elif(self.h_info == 'from previous simu'):
+                            raise ValueError("NaN value found in eval_Z")
+                elif(self.h_info == 'from DdeResult'):
                     Z_k = self.h(t_past_k)
                 elif(self.h_info == 'from constant'):
                     Z_k = self.h
@@ -325,27 +452,35 @@ class DdeSolver(object):
         return Z
 
     def eval_y0_from_h(self, t_eval):
+        """Evaluation of y0 at $t<=t0$ according to the user given history.
+
+        Parameters
+        ----------
+        t_eval : float
+            Current time.
+        Returns
+        -------
+        Y : ndarray, shape (n,)
+            State at t_eval.
         """
-        evaluation of y at time t_eval<=self.t0 i.e. less than current time step
-        """
-        Y0 = np.zeros(self.n)
+        Y = np.zeros(self.n)
         if(t_eval <= self.t0):
             # case where we can not use continuous extension
             if(self.h_info == 'from function'):
-                Y0 = self.h(t_eval)
+                Y = self.h(t_eval)
             elif(self.h_info == 'from tuple'):
-                Y0 = np.zeros(self.n)
+                Y = np.zeros(self.n)
                 for i in range(self.n):
-                    Y0[i] = self.h[i](t_eval)
-                    if(np.isnan(Y0[i])):
-                        raise ValueError("NaN value found in eval_y_past")
-            elif(self.h_info == 'from previous simu'):
-                Y0 = self.h(t_eval)
+                    Y[i] = self.h[i](t_eval)
+                    if(np.isnan(Y[i])):
+                        raise ValueError("NaN value found in eval_Z")
+            elif(self.h_info == 'from DdeResult'):
+                Y = self.h(t_eval)
             elif(self.h_info == 'from constant'):
-                Y0 = self.h
+                Y = self.h
         else:
-            raise ValueError("can not eval time")
-        return Y0
+            raise ValueError("can not eval state at t > t0 with this routine")
+        return Y
 
     @property
     def step_size(self):

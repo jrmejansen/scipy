@@ -2,6 +2,15 @@ from scipy.integrate import solve_dde
 import matplotlib.pyplot as plt
 import numpy as np
 
+
+"""
+The Kermack–McKendrick model (Example 1 from Shampine 2000Solving DDEs in Matlab)
+
+Tested features:
+    - none terminal event location
+
+"""
+
 def fun(t,y,Z):
     y_tau1 = Z[:,0]
     y_tau10 = Z[:,1]
@@ -32,11 +41,6 @@ t0 = 0.0
 tf = 40
 tau1 = 1.
 tau10 = 10.
-gamma = 0.248;
-beta  = 1;
-A = 0.75;
-omega = 1.37;
-eta = np.arcsin(gamma/A);
 
 y0 = [5.,.1,1.0]
 delays = [tau1,tau10]
@@ -90,5 +94,5 @@ plt.plot(t2_e_mat,y2_e_mat,'C1 o')
 plt.xlabel(r'$t$')
 plt.ylabel(r'$y$')
 plt.legend()
-plt.savefig('figures/virus/virus')
+plt.savefig('figures/KermackMcKendrick/y')
 plt.show()
