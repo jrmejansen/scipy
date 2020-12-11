@@ -57,7 +57,6 @@ DDE.add_past_point(-ε,1,0)
 DDE.add_past_point( 0,1,1)
 DDE.initial_discontinuities_handled = True
 
-DDE.adjust_diff()
 data = []
 dt_jit = []
 times = np.linspace(DDE.t+0.01, tf, 101)
