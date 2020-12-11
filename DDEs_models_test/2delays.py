@@ -46,7 +46,7 @@ f = [ -y_jit(0,t_jit-tau1) -y_jit(0,t_jit-tau2)]
 DDE = jitcdde(f)
 DDE.set_integration_parameters(atol=atol,rtol=rtol)
 DDE.constant_past(y0)
-DDE.step_on_discontinuities()
+DDE.adjust_diff()
 print(DDE.t)
 data = []
 t_jit = np.linspace(DDE.t+0.01, tf+0.01, 101)
