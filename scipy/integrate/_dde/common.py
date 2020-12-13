@@ -207,6 +207,7 @@ class ContinuousExt(object):
         if len(ts) != len(ys):
             raise ValueError("number of ys and ts don't match.")
 
+        print('ContinousExt len(ts)', len(ts), 'len interp', len(interpolants))
         self.ts = ts
         self.interpolants = interpolants
         if ts[-1] >= ts[0]:
@@ -242,8 +243,8 @@ class ContinuousExt(object):
         if not self.ascending:
             segment = self.n_segments - 1 - segment
 
-        # special management for the first segment which is the 
-        # history conditions. As we store history values between t0-delayMax 
+        # special management for the first segment which is the
+        # history conditions. As we store history values between t0-delayMax
         # and t0, the first segment is not a dense output of the RK integration.
         if(segment==0):
             history = self.interpolants[segment]
@@ -294,7 +295,7 @@ class ContinuousExt(object):
             if not np.any(np.diff(t) < EPS) and isDiscont_in_t:
                 raise ValueError("As discontinuities are within integration time interval"
                       "the user have to provide t with duplicates values in %s" %self.t_discont)
-            # if it is the case, we remove repeated time to add them at the end 
+            # if it is the case, we remove repeated time to add them at the end
             # of interp process
             idxs = np.argwhere(np.diff(t) < EPS) + 1
             t = np.delete(t, idxs)
@@ -361,3 +362,151 @@ class ContinuousExt(object):
                 ys = np.insert(ys, idx, self.y_discont[k], axis=1)
         return ys
 
+class ContinuousExtCyclic(object):
+    """ Cyclic collection of dense ouput list and the corresponding times list.
+    Informations only in time intervall [t, t-delayMax] are keeped. This class 
+    is written from ContinousExtension.
+    A cyclic management of data permit a better code efficency
+
+    The interpolants cover the range between `t_min = t_current - delayMax`
+    and `t_current` where t_current is the current integration time 
+    (see Attributes below).
+
+    When evaluating at a breakpoint (one of the values in `ts`) a segment with
+    the lower index is selected.
+
+    Parameters
+    ----------
+    t0 : float
+        Initial time
+    delayMax : float
+        Maximal delay
+    h : callable
+        History function
+    t_discont : list
+        The times of jumps
+    y_discont : list
+        The values of y at t_discont
+
+    Attributes
+    ----------
+    ts : array_like, shape (n_segments + 1,)
+        Time instants between which local interpolants are defined. Must
+        be strictly increasing or decreasing (zero segment with two points is
+        also allowed).
+    interpolants : list of history and DenseOutput with respectively 1 and
+        n_segments-1 elements
+        Local interpolants. An i-th interpolant is assumed to be defined
+        between ``ts[i]`` and ``ts[i + 1]``.
+    t_min, t_max : float
+        Time range of the interpolation.
+    n_segments : int
+        Number of interpolant.
+    """
+
+    def __init__(self, t0, delayMax, h, t_discont=[], y_discont=[]):
+        self.t_discont = t_discont
+        self.y_discont = y_discont
+        self.delayMax = delayMax
+        self.t0 = t0
+        self.t_min = self.t0 - self.delayMax
+        self.t_max = self.t0
+        self.ts = [self.t_min, self.t0]
+        self.interpolants = [h]
+        self.n_segments = 1
+
+    def update(self,t,sol):
+        """ Update the cyclic storage of past values by adding new time and 
+            continous extension
+
+        Parameters
+        ----------
+        t : float or list
+            New time points to add in self.ts
+        sol : callable or list of callable
+            New sol in intervall between self.ts[-1] et t
+
+        Returns
+        -------
+        self.ts : list
+            Update of self.ts
+        self.interpolants : list
+            Update of self.interpolants
+        """
+        if isinstance(t,list) and isinstance(sol,list):
+            print('self.t0', self.t0, 't', t)
+            if not np.isclose(t[-1], self.t0):
+                raise ValueError('Problem of time continuity')
+            self.ts = t
+            self.interpolants = sol
+            self.n_segments = len(self.interpolants)
+        else:
+            self.t_min = t - self.delayMax
+            self.t_max = t
+            self.ts.append(t)
+            # print('after ts = %s' %(self.ts))
+            self.interpolants.append(sol)
+            self.n_segments += 1
+
+        self.cleanUp()
+        if len(self.ts) != self.n_segments + 1:
+            raise ValueError("Numbers of time stamps and interpolants don't match.")
+        if not np.all(np.diff(self.ts) > 0):
+             raise ValueError("`ts` must be strictly increasing")
+
+    def cleanUp(self):
+        """Remove times and callable function sol (continous extension) when 
+        not anymore useful. Useful informations for past values are in the 
+        intervall [t_current-delayMax, t_current]
+
+        Returns
+        -------
+        self.ts : list
+            Update of self.ts
+        self.interpolants : list
+            Update of self.interpolants
+        self.n_segments : int
+            Update of self.n_segments
+        """
+        idx = [x for x, val in enumerate(self.ts) if val < self.t_min]
+        to_rm = []
+        for i in idx:
+            if not (self.ts[i] < self.t_min and self.t_min < self.ts[i+1]):
+                to_rm.append(i)
+        # reverse the to-rm list for not throw off the subsequent indexes.
+        for i in sorted(to_rm, reverse=True):
+            del self.ts[i], self.interpolants[i]
+        self.n_segments = len(self.interpolants)
+
+    def _call_single(self, t):
+
+        if not (self.t_min <= t and t <= self.t_max):
+            raise ValueError('t not in delayed state time intervall')
+
+        if self.t_discont and np.any(np.abs(np.array(self.t_discont) - t) < EPS):
+            print('discont in Zeval')
+            print('self.t_discont %s t=%s' % (self.t_discont,t))
+            return np.asarray(self.y_discont)[np.abs(np.array(self.t_discont) - t) < EPS]
+        else:
+            ind = np.searchsorted(self.ts, t, side='left')
+            segment = min(max(ind - 1, 0), self.n_segments - 1)
+            return self.interpolants[segment](t)
+
+    def __call__(self, t):
+        """Evaluate the solution.
+
+        Parameters
+        ----------
+        t : float
+            Points to evaluate at.
+
+        Returns
+        -------
+        y : ndarray, shape (n_states,)
+            Computed values. Shape depends on whether `t` is a scalar
+        """
+        t = np.asarray(t)
+        if t.ndim == 0:
+            return self._call_single(t)
+        else:
+            raise ValueError('t must be array where ndim == 0')

@@ -1,6 +1,5 @@
-import dill
-dill.settings['recurse'] = True
 from scipy.integrate import solve_dde
+from scipy.special import factorial
 import matplotlib.pyplot as plt
 import numpy as np
 from jitcdde import jitcdde
@@ -17,29 +16,33 @@ delay–differential equations.
 
 Comparison to analytical solution in t [0,10]
 
-$y(t) = sum_{i=1}^n /frac{(t-i+1)^i}{i!}$ for $t\in [n-1,n]$
 """
 
-# analytic sol
-def expresion(times,fct_np):
-    """
-    times a array of time np.array
-    return the solution
-    """
+def ana(t, tau, mu, phi):                    
+    """                                      
+    Solution of $y'(t>=0)=\mu y(t-tau) $     
+    et $y(t<=0)=h$                           
+    $y(t) = \sum_0^{[t/\tau]+1}              
+        \frac{(\mu(t-(n-1)\tau))^n}{n!}$     
+    t :float                                 
+        current time                         
+    tau : float                              
+        delay                                
+    phi : float                              
+        past state t<=t0          
 
-    kmax = len(fct_np)
-    sol = np.zeros(times.shape)
-    Nt = len(times)
-    k = 1
-    for i in range(Nt):
-        if (times[i]<= k*tau):
-            sol[i] = fct_np[k](times[i])
-        else:#elif(k<kmax):
-            k = k+1
-            sol[i] = fct_np[k](times[i])
-    return sol
+    Reference
+    --------
+    Baker, 1995, Issues in the numerical solution of evolutionary delay 
+        differential equations, Advances in Computational Mathematics.
+    """                                      
+    s = 0.                                   
+    for n in range(int(np.floor(t/tau)) + 2):
+        s += (mu*(t - (n - 1.) * tau)**n) / \
+                factorial(n)                 
+    return s * phi                           
 
-fct_np = dill.load(open("data_ana/diverging_tf6_tau1.pkl", "rb"))
+
 def fun(t,y,Z):
     y_tau = Z[:,0]
     return [ + y_tau ]
@@ -90,10 +93,10 @@ y_mat = mat['y']
 yp_mat = mat['yp']
 
 
-ana_spdev = expresion(t,fct_np)
-ana_spdev45 = expresion(t45,fct_np)
-ana_mat = expresion(t_mat,fct_np)
-ana_jit = expresion(t_jit,fct_np)
+ana_spdev = np.array([ana(t[i], tau, 1.0, 1.0) for i in range(len(t))])
+ana_spdev45 = np.array([ana(t45[i], tau, 1.0, 1.0) for i in range(len(t45))])
+ana_mat = np.array([ana(t_mat[i], tau, 1.0, 1.0) for i in range(len(t_mat))])
+ana_jit = np.array([ana(t_jit[i],tau, 1.0, 1.0) for i in range(len(t_jit))])
 
 err_spdev = np.abs(np.abs(y - ana_spdev) / ana_spdev)
 err_spdev45 = np.abs(np.abs(y45 - ana_spdev45) / ana_spdev45)

@@ -9,6 +9,7 @@ The suitcase problem (Example 8 from Shampine 2000, Solving Delay Differential
 Equations with dde23)
 
 Tested features:
+
     - initial discontinuities
     - restart integration
     - events locations

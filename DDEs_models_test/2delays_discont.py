@@ -10,6 +10,11 @@ DDE with 2 delays and a discontinuity at initial time
     -Initial and history functions :
       y(t0) = 1.5
       h(t) = 1.0 for t<t0
+
+Tested features:
+    - initial discontinuities
+    - dense output with init discont
+
 """
 def fun(t,y,Z):
     y_tau1 = Z[:,0]
@@ -30,7 +35,8 @@ y0 = [1.5]
 def h(t):
     return [1.0]
 
-sol = solve_dde(fun, tspan, delays, y0, h, method='RK23', atol=atol, rtol=rtol)
+sol = solve_dde(fun, tspan, delays, y0, h, method='RK23', dense_output=True,
+        atol=atol, rtol=rtol)
 t = sol.t
 y = sol.y[0,:]
 yp = sol.yp[0,:]

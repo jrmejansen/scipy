@@ -109,7 +109,7 @@ script is in DDEs_models_test/2delays.py
 
 y'(t) = -y(t-1/3) - y(t-3/2)\
 y(t0) = y0 \
-y(t<t0)=h \
+y(t<t0)=h 
 
 script is in DDEs_models_test/2delays_discont.py
 

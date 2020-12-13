@@ -98,7 +98,6 @@ plt.xlabel('y')
 plt.ylabel('yp')
 plt.legend()
 plt.savefig('figures/mackeyGlass/phase')
-plt.savefig('phase')
 
 plt.figure()
 plt.plot(t, y, '*',label='solve_dde')

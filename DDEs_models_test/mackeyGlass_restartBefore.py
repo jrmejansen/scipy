@@ -27,14 +27,11 @@ y0 = [1.0]
 def h(t):
     return [1.]
 
-sol23 = solve_dde(fun, tspan, delays, y0, h, method='RK23', atol=atol, rtol=rtol)
+sol23 = solve_dde(fun, tspan, delays, y0, h, method='RK23', dense_output=True,
+        atol=atol, rtol=rtol)
 t = sol23.t
 y = sol23.y[0,:]
 yp = sol23.yp[0,:]
-
-
-
-
 
 t_restart = sol23.t[-1] * 0.6
 print('\n restart before tf =%s  \

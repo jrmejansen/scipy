@@ -4,8 +4,7 @@ import numpy as np
 import sys
 from .rk import RK23, RK45
 from scipy.optimize import OptimizeResult
-from scipy.integrate import OdeSolution
-from .common import EPS, ContinuousExt
+from .common import EPS, ContinuousExt, ContinuousExtCyclic
 from .base import DdeSolver
 
 
@@ -153,7 +152,7 @@ def find_active_events(g, g_new, direction):
     return np.nonzero(mask)[0]
 
 
-def solve_dde(fun, t_span, delays, y0, h, method='RK23',
+def solve_dde(fun, t_span, delays, y0, h, method='RK23', dense_output = False,
               events=None, jumps=[], tracked_stages=None, args=None, **options):
     """Solve a system of constant delay differential equation (DDEs).
 
@@ -203,6 +202,8 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23',
               for evaluation of delayed states.
 
         All explicit Runge-Kutta should be used for non-stiff DDEs.
+    dense_output : bool, optional                                   
+        Whether to compute a continuous solution. Default is False. 
     events : callable, or list of callables, optional
         Events to track. If None (default), no events will be tracked.
         Each event occurs at the zeros of a continuous function of time and
@@ -350,77 +351,89 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23',
         method = METHODS[method]
     solver = method(fun, t0, y0, h, tf, delays, jumps, tracked_stages, **options)
 
-    if delays:
-        if solver.h_info != 'from DdeResult':
-            firstComp_init_discont = False
-            if solver.init_discont:
+    if solver.h_info != 'from DdeResult':
+        if solver.initDiscont:
+            # init CE_cyclic
+            CE_cyclic = ContinuousExtCyclic(t0, solver.delayMax, solver.h, [solver.t], [solver.y])
+            if dense_output:
                 # initial discont at t0, need to repeate initial time for
-                # handling properly the evaluation of delayed state.
+                # handling properly the dense output.
                 ts = [solver.t_oldest, solver.t] + [solver.t]
                 ys = [solver.y_oldest, solver.y] + [solver.y]
                 yps = [solver.yp_oldest, solver.f] + [solver.f]
                 interpolants = [solver.h]
             else:
+                ts = [t0]
+                ys = [y0]
+                yps = [solver.f]
+                interpolants = []
+        else:
+            # init CE_cyclic
+            CE_cyclic = ContinuousExtCyclic(t0, solver.delayMax, solver.h)
+            if dense_output:
                 ts = [solver.t_oldest, solver.t]
                 ys = [solver.y_oldest, solver.y]
                 yps = [solver.yp_oldest, solver.f]
                 interpolants = [solver.h]
-        elif solver.h_info == 'from DdeResult':
-            (ts, ys, yps) = solver.solver_old.datas
-            interpolants = solver.h.interpolants
+            else:
+                ts = [t0]
+                ys = [y0]
+                yps = [solver.f]
+                interpolants = []
 
-            if solver.t0_l and np.argwhere(np.diff(np.asarray(ts)) < EPS):
-                # check if first initia at t0_l[0] was this discont
-                firstComp_init_discont = np.abs(np.asarray(ts)
-                                                [np.argwhere(np.diff(np.asarray(ts)) < EPS)[:,0]]
-                                                - solver.t0_l[0]) < EPS
-            else:
-                firstComp_init_discont = False
-            # particular case of a discontinuity at initial time
-            if solver.init_discont:
-                # case of the restart before the last time with
-                # discontinity of order 0 at t0 < tf_{lastIntegration}
-                if(solver.before):
-                    # looking for ts <= solver.t
-                    idx = np.searchsorted(ts,solver.t) + 1
-                    ts = ts[:idx] + [solver.t]
-                    ys = ys[:idx] + [solver.y]
-                    yps = yps[:idx] + [solver.f]
-                    interpolants = interpolants[:idx]
-                else:
-                    # initial discont at t0, need to repeate initial time for  
-                    # handling properly the evaluation of delayed state.       
-                    ts = ts + [solver.t]
-                    ys = ys + [solver.y]
-                    yps = yps + [solver.f]
-            # no discontinuity of order 0, but restart before tf of last simulation
-            else:
-                if(solver.before):
-                    if firstComp_init_discont:
-                        # discont of order 0 at first t0 
-                        idx = np.searchsorted(ts,solver.t)
-                        ts = ts[:idx] + [solver.t]
-                        ys = ys[:idx] + [solver.y]
-                        yps = yps[:idx] + [solver.f]
-                        # - 1 to have interpo ok
-                        interpolants = interpolants[:idx-1]
-                    else:
-                        idx = np.searchsorted(ts,solver.t)
-                        # print('idx', idx)
-                        # print('ts', ts)
-                        ts = ts[:idx] + [solver.t]
-                        ys = ys[:idx] + [solver.y]
-                        yps = yps[:idx] + [solver.f]
-                        interpolants = interpolants[:idx]
+    elif solver.h_info == 'from DdeResult':
+        (ts_o, ys_o, yps_o) = solver.solver_old.datas
+        interpolants_o = solver.h.interpolants
+
+        t_init = [solver.data_init[i][0] for i in range(len(solver.data_init))]
+        t_oldest = t0 - solver.delayMax
+        # check if past discont no anymore in [t0-tauMax, t0]
+        if np.any(np.array(t_init) > solver.t_oldest):
+            tToAdd = [solver.data_init[i][0] for i in \
+             range(len(solver.data_init)) if solver.data_init[i][0] > t_oldest]
+            yToAdd = [solver.data_init[i][1] for i in \
+             range(len(solver.data_init)) if solver.data_init[i][0] > t_oldest]
+            # have to add the discont in intervall of past value in Zeval
+            if solver.initDiscont:
+                tToAdd.append(solver.t)
+                yToAdd.append(solver.y)
+            
+            CE_cyclic = ContinuousExtCyclic(t0, solver.delayMax,
+                    solver.h, tToAdd, yToAdd)
         else:
-            raise ValueError("value of solver.h_info not allowed")
-    else:
-        # start as in solve_ivp
-        ts = [t0]
-        ys = [y0]
-        yps = [solver.f]
+            CE_cyclic = ContinuousExtCyclic(t0, solver.delayMax, solver.h)
 
-        interpolants = []
+        # particular case of a discontinuity at initial time
+        if solver.initDiscont:
+            # case of the restart before the last time with
+            # discontinity of order 0 at t0 < tf_{lastIntegration}
+            if(solver.before):
+                # looking for ts_o <= solver.t
+                idx = np.searchsorted(ts_o,solver.t) + 1
+                ts = ts_o[:idx] + [solver.t]
+                ys = ys_o[:idx] + [solver.y]
+                yps = yps_o[:idx] + [solver.f]
+                interpolants = interpolants_o[:idx]
+            else:
+                # initial discont at t0, need to repeate initial time for  
+                # handling properly the evaluation of delayed state.       
+                ts = ts_o + [solver.t]
+                ys = ys_o + [solver.y]
+                yps = yps_o + [solver.f]
+        else: # no discont of order 0, but restart before tf of last integration
+            if(solver.before):
+                idx = np.searchsorted(ts_o,solver.t)
+                ts = ts_o[:idx] + [solver.t]
+                ys = ys_o[:idx] + [solver.y]
+                yps = yps_o[:idx] + [solver.f]
+                interpolants = interpolants_o[:idx-1]
+            else:
+                ts = ts_o
+                ys = ys_o
+                yps = yps_o
+                interpolants = interpolants_o
+    else:
+        raise ValueError("")
 
     events, is_terminal, event_dir = prepare_events(events)
 
@@ -462,7 +475,8 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23',
         yp = solver.f
         sol = solver.dense_output()
 
-        interpolants.append(sol)
+        if dense_output:
+            interpolants.append(sol)
 
         if events is not None:
             Z = solver.eval_Z(t)
@@ -492,10 +506,8 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23',
         ys.append(y)
         yps.append(yp)
 
-        # construction of ContinuousExt which is the denseoutput of RK 
-        # integration. It is needed for evaluation of delayed states
-        CE = ContinuousExt(ts, interpolants, ys)
-        solver.CE = CE
+        CE_cyclic.update(t, sol)
+        solver.CE = CE_cyclic
 
     message = MESSAGES.get(status, message)
     if t_events is not None:
@@ -506,32 +518,27 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23',
     y_arr = np.vstack(ys).T
     yp_arr = np.vstack(yps).T
 
-    if delays:
+    if dense_output:
         sol = ContinuousExt(ts, interpolants, ys)
     else:
-        sol = OdeSolution(ts, interpolants)
+        sol = None
 
-    if delays:
-        if solver.init_discont or firstComp_init_discont:
-            # remove repeated vals initializated for numerical need : ContinousExt
-            # seen that there were discont values
-            t_arr = t_arr[2:]
-            y_arr = y_arr[:,2:]
-            yp_arr = yp_arr[:,2:]
-        else:
-            t_arr = t_arr[1:]
-            y_arr = y_arr[:,1:]
-            yp_arr = yp_arr[:,1:]
+    if solver.initDiscont or solver.firstInitDiscont:
+        # remove repeated vals initializated for numerical need : ContinousExt
+        # seen that there were discont values
+        t_arr = t_arr[2:]
+        y_arr = y_arr[:,2:]
+        yp_arr = yp_arr[:,2:]
     else:
-        t_arr = np.hstack(ts)
-        y_arr = np.vstack(ys).T
-        yp_arr = np.vstack(ys).T
+        t_arr = t_arr[1:]
+        y_arr = y_arr[:,1:]
+        yp_arr = yp_arr[:,1:]
     # datas useful for restart integration from values instead of
     # sol cotinous extension
     datas = (ts, ys, yps)
-    return DdeResult(t=t_arr, y=y_arr, yp=yp_arr, sol=sol, datas=datas,
-                     discont=solver.discont, nxtDisc=solver.nxtDisc,
-                     t0_l=solver.t0_l, t_events=t_events, y_events=y_events,
-                     nfev=solver.nfev, nOverlap=solver.nOverlap,
-                     nfailed=solver.nfailed, status=status,
-                     message=message, success=status >= 0)
+    return DdeResult(t=t_arr, y=y_arr, yp=yp_arr, CE_cyclic=CE_cyclic, sol=sol,
+            datas=datas, discont=solver.discont, nxtDisc=solver.nxtDisc,
+            data_init=solver.data_init, t_events=t_events,
+            y_events=y_events, nfev=solver.nfev,
+            nOverlap=solver.nOverlap, nfailed=solver.nfailed,
+            status=status, message=message, success=status >= 0)

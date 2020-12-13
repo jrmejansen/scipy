@@ -4,7 +4,8 @@ import numpy as np
 
 
 """
-The Kermack–McKendrick model (Example 1 from Shampine 2000Solving DDEs in Matlab)
+The Kermack–McKendrick model (Infectious Disease Modelling 
+in Hairer 1987 Solving Ordinary Differential Equations I.)
 
 Tested features:
     - none terminal event location
