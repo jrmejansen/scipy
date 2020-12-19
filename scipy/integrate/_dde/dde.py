@@ -154,29 +154,28 @@ def find_active_events(g, g_new, direction):
 
 def solve_dde(fun, t_span, delays, y0, h, method='RK23', dense_output = False,
               events=None, jumps=[], tracked_stages=None, args=None, **options):
-    """Solve a system of constant delay differential equation (DDEs).
+    """Solve a system of delay differential equation (DDEs) with fixed delay.
 
-    This function numerically integrates a system of constant delay differential
-    equations given an initial value and a history function::
+    This function numerically integrates a system of delay differential
+    equations with constant delay given an initial value and a history function::
 
         dy / dt = f(t, y, Z) with Z[:,i] = y(t-tau_i) and tau_i = delays[i]
         y(t0) = y0
         y(t<t0) = h(t)
 
-    Here t is a 1-D independent variable (time), y(t) is an
-    N-D vector-valued function (state), Z(t) N-D vector-valued function of
-    delayed y(t) (delayed_state) and an N-D vector-valued function f(t, y, Z)
-    determines the differential equations.
+    Here t is a one-dimensional independent variable (time), y(t) is an
+    n-dimensional vector-valued function (state), and an n-dimenisional vector-valued function f(t, y, Z) determines the differential equations.
     The goal is to find y(t) approximately satisfying the differential
     equations, given an initial value y(t0)=y0 and history conditions
     y(t)=h(t) for t<t0.
+    Z is an array containing past states at the specified delays.
 
-    Solver do not support integration in the complex domain.
+    The solver does not support integration in the complex domain.
 
     Parameters
     ----------
     fun : callable
-        Right-hand side of the system. The calling signature is ``fun(t,y,Z)``.
+        Right-hand side of the system. The signature is ``fun(t,y,Z)``.
         Here `t` is a scalar and `y,Z` are ndarray.
     t_span : 2-tuple of floats
         Interval of integration (t0, tf). The solver starts with t=t0 and
@@ -194,16 +193,16 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', dense_output = False,
               The error is controlled assuming accuracy of the fourth-order
               method, but steps are taken using the fifth-order accurate
               formula (local extrapolation is done). A quartic interpolation
-              polynomial is used for evaluation of delayed states
+              polynomial is used for evaluation of delayed states.
             * 'RK23': Explicit Runge-Kutta method of order 3(2) [3]_. The error
               is controlled assuming accuracy of the second-order method, but
               steps are taken using the third-order accurate formula (local
               extrapolation is done). A cubic Hermite polynomial is used for
               for evaluation of delayed states.
 
-        All explicit Runge-Kutta should be used for non-stiff DDEs.
-    dense_output : bool, optional                                   
-        Whether to compute a continuous solution. Default is False. 
+        All explicit Runge-Kutta methods can be used for non-stiff DDEs.
+    dense_output : bool, optional
+        Whether to compute a continuous solution. Default is False.
     events : callable, or list of callables, optional
         Events to track. If None (default), no events will be tracked.
         Each event occurs at the zeros of a continuous function of time and
@@ -233,7 +232,7 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', dense_output = False,
         the additional arguments are passed to all user-defined functions.
         So if, for example, `fun` has the signature ``fun(t, y, Z, a, b, c)``,
         any event functions must have the same signature, and `args` must be a
-        tuple.
+        3-tuple.
     options
         Options passed to a chosen solver. All options available for already
         implemented solvers are listed below.
@@ -265,12 +264,12 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', dense_output = False,
     y : ndarray, shape (n, n_points)
         Values of the solution at `t`.
     datas : tuple
-        List of time (ts), state (ys) and derivative (yps) useful for restart.
-        datas = (ts, ys, yps).
+        List of time (ts), state (ys) and derivative (yps).
+        This is useful for continuing the integration.
     sol : `ContinuousExt` or None
-        The continous extansion of the solutions
+        The continous extension of the solutions
     t_events : list of ndarray or None
-        Contains for each event type a list of arrays at which an event of
+        Contains for each event type a list of times at which an event of
         that type event was detected. None if `events` was None.
     y_events : list of ndarray or None
         For each value of `t_events`, the corresponding value of the solution.
@@ -278,11 +277,11 @@ def solve_dde(fun, t_span, delays, y0, h, method='RK23', dense_output = False,
     nfev : int
         Number of evaluations of the right-hand side.
     nOverlap : int
-        Number of overlapping without iteration process as in [4]_. If during
-        integration, h_n > tau_i for some i, when Z  is evaluated in the
+        Number of overlaps without an iteration process as in [4]_. If during
+        integration, h_n > tau_i for some i, when Z is evaluated in the
         current step.
     nfailed : int
-        Number of failed integration step.
+        Number of failed integration steps.
     status : int
         Reason for algorithm termination:
 
