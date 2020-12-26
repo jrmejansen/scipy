@@ -1,6 +1,6 @@
 """
 =============================================
-Integration and ODEs (:mod:`scipy.integrate`)
+Integration, ODEs and DDEs(:mod:`scipy.integrate`)
 =============================================
 
 .. currentmodule:: scipy.integrate
@@ -60,6 +60,18 @@ The solvers are implemented as individual classes, which can be used directly
    DenseOutput   -- Local interpolant for computing a dense output.
    OdeSolution   -- Class which represents a continuous ODE solution.
 
+Solving delay differential equations DDEs systems
+==============================================
+
+The solvers are implemented from the structure of Solving initial value 
+problems (solve_ivp)
+
+.. autosummary::
+   :toctree: generated/
+
+   solve_dde     -- Convenient function for DDEs integration.
+   RK23          -- Explicit Runge-Kutta solver of order 3(2).
+   RK45          -- Explicit Runge-Kutta solver of order 5(4).
 
 Old API
 -------
@@ -93,6 +105,8 @@ from ._ode import *
 from ._bvp import solve_bvp
 from ._ivp import (solve_ivp, OdeSolution, DenseOutput,
                    OdeSolver, RK23, RK45, DOP853, Radau, BDF, LSODA)
+from ._dde import (solve_dde, DdeSolver, ContinuousExt, 
+                   RK23, RK45, DenseOutput)
 from ._quad_vec import quad_vec
 
 __all__ = [s for s in dir() if not s.startswith('_')]
