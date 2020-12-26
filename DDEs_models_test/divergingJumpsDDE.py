@@ -115,9 +115,16 @@ DDE = jitcdde(f,
 		max_delay=20 # for plotting; lest history is forgotten
 	)
 DDE.set_integration_parameters(atol=atol,rtol=rtol)
-DDE.past_from_function(h,times_of_interest=np.linspace(-1.1,-1e-8,10))
 
-DDE.adjust_diff()
+ε = 1e-8
+DDE.add_past_point(-1,1,0)
+for i,x in enumerate(np.arange(-0.8,-0.2,0.2)):
+	DDE.add_past_point(x-ε,(-1)** i   ,0)
+	DDE.add_past_point(x+ε,(-1)**(i+1),0)
+DDE.add_past_point(-ε,1,0)
+DDE.add_past_point( 0,1,1)
+DDE.initial_discontinuities_handled = True
+
 data = []
 dt_jit = []
 times = np.linspace(DDE.t+0.01, tf, 101)
